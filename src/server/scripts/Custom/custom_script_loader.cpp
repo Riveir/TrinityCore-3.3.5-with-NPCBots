@@ -63,6 +63,7 @@ void AddSC_racial_traits_npc();
 void AddSC_npc_1v1arena();
 void AddLfgSoloScripts();
 void AddSC_Dynamic_Resurrections();
+void AddSC_skip_StarterArea();
 
 void AddCustomScripts()
 {
@@ -109,4 +110,5 @@ void AddCustomScripts()
     AddSC_npc_1v1arena();
     AddLfgSoloScripts();
     AddSC_Dynamic_Resurrections();
+    AddSC_skip_StarterArea();
 }
