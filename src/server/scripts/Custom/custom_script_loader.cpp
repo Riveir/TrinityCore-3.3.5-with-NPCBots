@@ -61,6 +61,7 @@
 // 39
 // 40
 void AddSC_npc_1v1arena();
+void AddLfgSoloScripts();
 
 void AddCustomScripts()
 {
@@ -105,4 +106,5 @@ void AddCustomScripts()
     // 39
     // 40
     AddSC_npc_1v1arena();
+    AddLfgSoloScripts();
 }

@@ -40,6 +40,7 @@
 #    METRIC SETTINGS
 #    1V1 ARENA
 #    AOE LOOT
+#    SOLO LFG
 ###################################################################################################
 
 ###################################################################################################
@@ -3864,33 +3865,6 @@ AuctionHouseBot.Buyer.Recheck.Interval = 20
 ###################################################################################################
 
 ###################################################################################################
-#  ELUNA SETTINGS
-#
-#   Eluna.Enabled
-#       Description: Enable or disable Eluna LuaEngine
-#       Default:    true  - (enabled)
-#                   false - (disabled)
-#
-#   Eluna.TraceBack
-#       Description: Sets whether to use debug.traceback function on a lua error or not.
-#                    Notice that you can redefine the function.
-#       Default:    false - (use default error output)
-#                   true  - (use debug.traceback function)
-#
-#   Eluna.ScriptPath
-#       Description: Sets the location of the script folder to load scripts from
-#                    The path can be relative or absolute.
-#       Default:    "lua_scripts"
-#
-
-Eluna.Enabled = true
-Eluna.TraceBack = false
-Eluna.ScriptPath = "lua_scripts"
-
-#
-###################################################################################################
-
-###################################################################################################
 # LOGGING SYSTEM SETTINGS
 #
 #  Appender config values: Given an appender "name"
@@ -4512,6 +4486,26 @@ Arena.1v1.BlockForbiddenTalents = 1
 #                     1 - (Enabled)
 
 AOE.LOOT.enable = 1
+
+#
+###################################################################################################
+
+###################################################################################################
+# SOLO LFG
+#
+#    SoloLFG.Enable
+#        Description: Enable the module.
+#        Default:     1  - (Enabled)
+#                     0  - (Disabled)
+
+SoloLFG.Enable = 1
+
+#    SoloLFG.Announce
+#        Description: Announce the module.
+#        Default:     1  - (Enabled)
+#                     0  - (Disabled)
+
+SoloLFG.Announce = 1
 
 #
 ###################################################################################################
