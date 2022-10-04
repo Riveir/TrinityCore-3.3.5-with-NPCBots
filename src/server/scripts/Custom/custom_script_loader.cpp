@@ -64,6 +64,7 @@ void AddSC_npc_1v1arena();
 void AddLfgSoloScripts();
 void AddSC_Dynamic_Resurrections();
 void AddSC_skip_StarterArea();
+void AddSolocraftScripts();
 
 void AddCustomScripts()
 {
@@ -111,4 +112,5 @@ void AddCustomScripts()
     AddLfgSoloScripts();
     AddSC_Dynamic_Resurrections();
     AddSC_skip_StarterArea();
+    AddSolocraftScripts();
 }
