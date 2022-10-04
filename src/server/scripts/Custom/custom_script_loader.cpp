@@ -59,7 +59,7 @@
 // 37
 // 38
 // 39
-// 40
+void AddSC_racial_traits_npc();
 void AddSC_npc_1v1arena();
 void AddLfgSoloScripts();
 void AddSC_Dynamic_Resurrections();
@@ -105,8 +105,8 @@ void AddCustomScripts()
     // 37
     // 38
     // 39
-    // 40
+    AddSC_racial_traits_npc();
     AddSC_npc_1v1arena();
     AddLfgSoloScripts();
-	AddSC_Dynamic_Resurrections();
+    AddSC_Dynamic_Resurrections();
 }
