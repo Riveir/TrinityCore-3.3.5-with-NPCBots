@@ -62,6 +62,7 @@
 // 40
 void AddSC_npc_1v1arena();
 void AddLfgSoloScripts();
+void AddSC_Dynamic_Resurrections();
 
 void AddCustomScripts()
 {
@@ -107,4 +108,5 @@ void AddCustomScripts()
     // 40
     AddSC_npc_1v1arena();
     AddLfgSoloScripts();
+	AddSC_Dynamic_Resurrections();
 }
