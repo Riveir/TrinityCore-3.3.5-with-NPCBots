@@ -1,7 +1,7 @@
 SET
-@Entry = 190000,
+@Entry = 190001,
 @NAME = "Arena 1v1",
-@Subname = "TrinityCore",
+@Subname = "",
 @IconName = "Speak";
 
 DELETE FROM `world`.`creature_template` WHERE `entry`=@Entry;
