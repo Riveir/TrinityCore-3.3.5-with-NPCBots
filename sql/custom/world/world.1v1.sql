@@ -1,5 +1,5 @@
 SET
-@Entry = 190000,
+@Entry = 190001,
 @NAME = "Arena 1v1",
 @Subname = "",
 @IconName = "Speak";
