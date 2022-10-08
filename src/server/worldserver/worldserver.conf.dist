@@ -48,6 +48,7 @@
 #    DYNAMIC RESURRECTION
 #    RACIAL TRAIT
 #    SKIP DEATHKNIGHT START
+#    TEMPLATE NPC
 #    
 ###################################################################################################
 
@@ -5227,4 +5228,8 @@ Skip.Deathknight.Start.Level = 58
 Skip.Deathknight.Optional.Enable = 1
 
 #
+###################################################################################################
+#TEMPLATENPC
+#After changing use .templatenpc reload
+TemplateNPC.BoostCost = 250
 ###################################################################################################
