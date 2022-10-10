@@ -65,7 +65,6 @@ void AddLfgSoloScripts();
 void AddSC_Dynamic_Resurrections();
 void AddSC_skip_StarterArea();
 void AddSolocraftScripts();
-void AddSC_TemplateNPC();
 void AddSC_NPC_Profession();
 void AddSC_REFORGER_NPC();
 
