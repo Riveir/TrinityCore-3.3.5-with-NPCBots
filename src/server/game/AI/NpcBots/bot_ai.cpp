@@ -3637,6 +3637,8 @@ Unit* bot_ai::_getTarget(bool byspell, bool ranged, bool &reset) const
             static constexpr std::array BoneSpikeIds = { CREATURE_ICC_BONE_SPIKE1, CREATURE_ICC_BONE_SPIKE2, CREATURE_ICC_BONE_SPIKE3 };
 
             auto boneSpikeCheck = [=, mydist = 50.f](Unit const* unit) mutable {
+                if (!unit->IsAlive())
+                    return false;
                 for (uint32 bsId : BoneSpikeIds) {
                     if (unit->GetEntry() == bsId)  {
                         if (HasRole(BOT_ROLE_RANGED))
@@ -13409,7 +13411,7 @@ void bot_ai::_LocalizeGameObject(Player const* forPlayer, std::string &gameobjec
 
 void bot_ai::_LocalizeSpell(Player const* forPlayer, std::string &spellName, uint32 entry) const
 {
-    uint32 loc = forPlayer->GetSession()->GetSessionDbLocaleIndex();
+    uint32 loc = forPlayer->GetSession()->GetSessionDbcLocale();
     std::wstring wnamepart;
 
     SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(entry);
