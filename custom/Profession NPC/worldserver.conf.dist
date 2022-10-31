@@ -1,0 +1,7 @@
+###################################################################################################
+#PROFESSION NPC
+#	If false then you start as Apprentice with skill 1/75
+#		with true you learn all recipes/spells and are max skill 450/450
+ProfessionNPC.Max = false
+#
+###################################################################################################
