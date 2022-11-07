@@ -43,7 +43,6 @@
 #include "SpellMgr.h"
 #include "SpellScript.h"
 #include "Vehicle.h"
-#include "Transmogrification.h"
 
 class spell_gen_absorb0_hitlimit1 : public AuraScript
 {
@@ -947,12 +946,7 @@ class spell_gen_clone_weapon_aura : public AuraScript
                 if (Player* player = caster->ToPlayer())
                 {
                     if (Item* mainItem = player->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_MAINHAND))
-                    {
-                        if (mainItem->transmog)
-                            target->SetVirtualItem(0, mainItem->transmog);
-                        else
-                            target->SetVirtualItem(0, mainItem->GetEntry());
-                    }
+                        target->SetVirtualItem(0, mainItem->GetEntry());
                 }
                 else
                     target->SetVirtualItem(0, caster->GetVirtualItemId(0));
@@ -966,12 +960,7 @@ class spell_gen_clone_weapon_aura : public AuraScript
                 if (Player* player = caster->ToPlayer())
                 {
                     if (Item* offItem = player->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_OFFHAND))
-                    {
-                        if (offItem->transmog)
-                            target->SetVirtualItem(1, offItem->transmog);
-                        else
-                            target->SetVirtualItem(1, offItem->GetEntry());
-                    }
+                        target->SetVirtualItem(1, offItem->GetEntry());
                 }
                 else
                     target->SetVirtualItem(1, caster->GetVirtualItemId(1));
@@ -984,12 +973,7 @@ class spell_gen_clone_weapon_aura : public AuraScript
                 if (Player* player = caster->ToPlayer())
                 {
                     if (Item* rangedItem = player->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_RANGED))
-                    {
-                        if (rangedItem->transmog)
-                            target->SetVirtualItem(2, rangedItem->transmog);
-                        else
-                            target->SetVirtualItem(2, rangedItem->GetEntry());
-                    }
+                        target->SetVirtualItem(2, rangedItem->GetEntry());
                 }
                 else
                     target->SetVirtualItem(2, caster->GetVirtualItemId(2));

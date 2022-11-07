@@ -67,8 +67,6 @@ void AddSC_skip_StarterArea();
 void AddSolocraftScripts();
 void AddSC_NPC_Profession();
 void AddSC_REFORGER_NPC();
-void AddSC_Transmogrification();
-
 
 void AddCustomScripts()
 {
@@ -119,5 +117,4 @@ void AddCustomScripts()
     AddSolocraftScripts();
     AddSC_NPC_Profession();
     AddSC_REFORGER_NPC();
-    AddSC_Transmogrification();
 }
