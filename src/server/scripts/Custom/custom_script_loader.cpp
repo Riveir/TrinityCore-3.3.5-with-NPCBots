@@ -19,6 +19,107 @@
 
 // The name of this function should match:
 // void Add${NameOfDirectory}Scripts()
+// 1
+// 2
+// 3
+// 4
+// 5
+// 6
+// 7
+// 8
+// 9
+// 10
+// 11
+// 12
+// 13
+// 14
+// 15
+// 16
+// 17
+// 18
+// 19
+// 20
+// 21
+// 22
+// 23
+// 24
+// 25
+// 26
+// 27
+// 28
+// 29
+// 30
+// 31
+// 32
+// 33
+// 34
+// 35
+// 36
+// 37
+// 38
+// 39
+// 40
+void AddLfgSoloScripts();
+void AddSC_skip_StarterArea();
+void AddSolocraftScripts();
+void Add_paymaster_npc();
+void AddSC_racial_traits_npc();
+void AddSC_REFORGER_NPC();
+void AddSC_Dynamic_Resurrections();
+void AddSC_TemplateNPC();
+void AddSC_NPC_Profession();
+void AddSC_npc_1v1arena();
+
 void AddCustomScripts()
 {
+    // 1
+    // 2
+    // 3
+    // 4
+    // 5
+    // 6
+    // 7
+    // 8
+    // 9
+    // 10
+    // 11
+    // 12
+    // 13
+    // 14
+    // 15
+    // 16
+    // 17
+    // 18
+    // 19
+    // 20
+    // 21
+    // 22
+    // 23
+    // 24
+    // 25
+    // 26
+    // 27
+    // 28
+    // 29
+    // 30
+    // 31
+    // 32
+    // 33
+    // 34
+    // 35
+    // 36
+    // 37
+    // 38
+    // 39
+    // 40
+	AddLfgSoloScripts();
+	AddSC_skip_StarterArea();
+	AddSolocraftScripts();
+	Add_paymaster_npc();
+	AddSC_racial_traits_npc();
+	AddSC_REFORGER_NPC();
+	AddSC_Dynamic_Resurrections();
+	AddSC_TemplateNPC();
+	AddSC_NPC_Profession();
+	AddSC_npc_1v1arena();
 }

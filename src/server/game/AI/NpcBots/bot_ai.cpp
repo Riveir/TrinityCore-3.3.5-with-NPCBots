@@ -3456,7 +3456,7 @@ bool bot_ai::CanBotAttack(Unit const* target, int8 byspell) const
         (target->IsAlive() && target->IsVisible() && me->IsValidAttackTarget(target) &&
         target->isTargetableForAttack(false) && !IsInBotParty(target) &&
         ((me->CanSeeOrDetect(target) && target->InSamePhase(me)) || CanSeeEveryone()) &&
-        (!master->IsAlive() || target->IsControlledByPlayer() || master->GetDistance(target) <= foldist) &&//if master is killed pursue to the end
+        (!master->IsAlive() || target->IsControlledByPlayer() || (followdist > 0 && master->GetDistance(target) <= foldist)) &&//if master is killed pursue to the end
         (target->IsHostileTo(master) || target->IsHostileTo(me) ||//if master is controlled
         (target->GetReactionTo(me) < REP_FRIENDLY && (master->IsInCombat() || target->IsInCombat()))) &&
         (byspell == -1 || !target->IsTotem()) &&
@@ -3637,6 +3637,8 @@ Unit* bot_ai::_getTarget(bool byspell, bool ranged, bool &reset) const
             static constexpr std::array BoneSpikeIds = { CREATURE_ICC_BONE_SPIKE1, CREATURE_ICC_BONE_SPIKE2, CREATURE_ICC_BONE_SPIKE3 };
 
             auto boneSpikeCheck = [=, mydist = 50.f](Unit const* unit) mutable {
+                if (!unit->IsAlive())
+                    return false;
                 for (uint32 bsId : BoneSpikeIds) {
                     if (unit->GetEntry() == bsId)  {
                         if (HasRole(BOT_ROLE_RANGED))
@@ -13409,7 +13411,7 @@ void bot_ai::_LocalizeGameObject(Player const* forPlayer, std::string &gameobjec
 
 void bot_ai::_LocalizeSpell(Player const* forPlayer, std::string &spellName, uint32 entry) const
 {
-    uint32 loc = forPlayer->GetSession()->GetSessionDbLocaleIndex();
+    uint32 loc = forPlayer->GetSession()->GetSessionDbcLocale();
     std::wstring wnamepart;
 
     SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(entry);
@@ -13940,7 +13942,7 @@ void bot_ai::CancelOrder(BotOrder const& order)
             me->GetName().c_str(), uint32(order._type));
         return;
     }
-    if (_orders.front()._type != order._type || _orders.front().params.whole != order.params.whole)
+    if (_orders.front()._type != order._type)
     {
         TC_LOG_ERROR("scripts", "bot_ai::CancelOrder: %s front order (type %u) is different from cur order (type %u)!",
             me->GetName().c_str(), uint32(_orders.front()._type), uint32(order._type));
@@ -13958,7 +13960,7 @@ void bot_ai::CompleteOrder(BotOrder const& order)
             me->GetName().c_str(), uint32(order._type));
         return;
     }
-    if (_orders.front()._type != order._type || _orders.front().params.whole != order.params.whole)
+    if (_orders.front()._type != order._type)
     {
         TC_LOG_ERROR("scripts", "bot_ai::CompleteOrder: %s front order (type %u) is different from cur order (type %u)!",
             me->GetName().c_str(), uint32(_orders.front()._type), uint32(order._type));
@@ -15246,7 +15248,7 @@ bool bot_ai::GlobalUpdate(uint32 diff)
 
             if (_lastZoneId != newzone)
                 _OnZoneUpdate(newzone, newarea); // also updates area
-            else if (_lastAreaId != newarea)
+            else// if (_lastAreaId != newarea)
                 _OnAreaUpdate(newarea);
 
             if (_wmoAreaUpdateTimer <= diff)

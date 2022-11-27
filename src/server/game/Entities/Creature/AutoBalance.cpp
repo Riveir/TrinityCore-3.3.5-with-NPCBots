@@ -49,7 +49,7 @@
 // The map values correspond with the .AutoBalance.XX.Name entries in the configuration file.
 static std::map<uint32, int32> forcedCreatureIds;
 static int8 PlayerCountDifficultyOffset, higherOffset, lowerOffset;
-static bool Is_AB_enabled, AnnounceAB, LevelScaling, LevelEndGameBoost, DungeonsOnly, PlayerChangeNotify,
+static bool Is_AB_enabled, AnnounceAB, LevelScaling, LevelEndGameBoost, DungeonsOnly, RaidsOnly, PlayerChangeNotify,
 LevelUseDb, DungeonScaleDownXP, CountNpcBots;
 static float GlobalRate, HealthMultiplier, ManaMultiplier, ArmorMultiplier, DamageMultiplier, MinHPModifier,
     MinManaModifier, MinDamageModifier, InflectionPoint, InflectionPointRaid, InflectionPointRaid10M,
@@ -162,6 +162,7 @@ private:
         LevelScaling = sConfigMgr->GetBoolDefault("AutoBalance.levelScaling", true);
         LevelEndGameBoost = sConfigMgr->GetBoolDefault("AutoBalance.LevelEndGameBoost", true);
         DungeonsOnly = sConfigMgr->GetBoolDefault("AutoBalance.DungeonsOnly", true);
+		RaidsOnly = sConfigMgr->GetBoolDefault("AutoBalance.RaidsOnly", true);
         PlayerChangeNotify = sConfigMgr->GetBoolDefault("AutoBalance.PlayerChangeNotify", true);
         LevelUseDb = sConfigMgr->GetBoolDefault("AutoBalance.levelUseDbValuesWhenExists", true);
         DungeonScaleDownXP = sConfigMgr->GetBoolDefault("AutoBalance.DungeonScaleDownXP", false);
@@ -280,13 +281,16 @@ private:
         if (!source || !value || source->GetTypeId() != TYPEID_UNIT || !source->IsInWorld() || source->IsControlledByPlayer())
             return;
 
-        if (DungeonsOnly && !source->GetMap()->Instanceable())
+        if ((DungeonsOnly || RaidsOnly) && !source->GetMap()->Instanceable())
             return;
 
+        if (RaidsOnly && !source->GetMap()->IsRaid())
+			return;
+		
         float damageMultiplier = source->ToCreature()->CustomData.damageMultiplier;
         if (damageMultiplier == 1.0f)
             return;
-
+		
         value = std::max<uint32>(value * damageMultiplier, 1);
     }
 };
@@ -651,8 +655,11 @@ private:
         if (!CanModifyCreatureAttributes(creature))
             return;
 
-        if (DungeonsOnly && !creature->GetMap()->Instanceable())
+        if ((DungeonsOnly || RaidsOnly) && !creature->GetMap()->Instanceable())
             return;
+		
+        if (RaidsOnly && !creature->GetMap()->IsRaid())
+			return;
 
         MapCustomData* mapABInfo = &creature->GetMap()->CustomData;
         bool isWorldMap = creature->GetMap()->GetEntry()->IsWorldMap();
@@ -712,7 +719,7 @@ private:
         // avoid level changing for critters and special creatures (spell summons etc.) in instances
         bool skipLevel = (creatureTemplate->maxlevel <= 1 && areaMinLvl >= 5);
 
-        if (LevelScaling && (!DungeonsOnly || creature->GetMap()->Instanceable()) && !skipLevel && !_checkLevelOffset(level, originalLevel))
+        if (LevelScaling && ((!DungeonsOnly || !RaidsOnly) || creature->GetMap()->Instanceable()) && !skipLevel && !_checkLevelOffset(level, originalLevel))
         {
             // change level only whithin the offsets and when in dungeon/raid
             if (level != creatureABInfo->selectedLevel || creatureABInfo->selectedLevel != creature->GetLevel())

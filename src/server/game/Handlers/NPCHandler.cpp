@@ -37,6 +37,9 @@
 #include "ReputationMgr.h"
 #include "ScriptMgr.h"
 #include "SpellInfo.h"
+#ifdef ELUNA
+#include "LuaEngine.h"
+#endif
 #include "SpellMgr.h"
 #include "Trainer.h"
 #include "World.h"
@@ -97,13 +100,13 @@ void WorldSession::HandleTrainerListOpcode(WorldPackets::NPC::Hello& packet)
     SendTrainerList(npc);
 }
 
-void WorldSession::SendTrainerList(Creature* npc)
+void WorldSession::SendTrainerList(Creature* npc, uint32 trainerEntry)
 {
     // remove fake death
     if (GetPlayer()->HasUnitState(UNIT_STATE_DIED))
         GetPlayer()->RemoveAurasByType(SPELL_AURA_FEIGN_DEATH);
 
-    Trainer::Trainer const* trainer = sObjectMgr->GetTrainer(npc->GetEntry());
+    Trainer::Trainer const* trainer = sObjectMgr->GetTrainer(trainerEntry ? trainerEntry : npc->GetEntry());
     if (!trainer)
     {
         TC_LOG_DEBUG("network", "WorldSession: SendTrainerList - trainer spells not found for %s", npc->GetGUID().ToString().c_str());
@@ -116,6 +119,9 @@ void WorldSession::SendTrainerList(Creature* npc)
         return;
     }
 
+	SetCurrentTrainer(trainerEntry);
+	GetPlayer()->PlayerTalkClass->GetGossipMenu().SetSenderGUID(npc->GetGUID());
+	
     trainer->SendSpells(npc, _player, GetSessionDbLocaleIndex());
 }
 
@@ -129,12 +135,15 @@ void WorldSession::HandleTrainerBuySpellOpcode(WorldPackets::NPC::TrainerBuySpel
         TC_LOG_DEBUG("network", "WORLD: HandleTrainerBuySpellOpcode - %s not found or you can not interact with him.", packet.TrainerGUID.ToString().c_str());
         return;
     }
+	
+	if (packet.TrainerGUID != GetPlayer()->PlayerTalkClass->GetGossipMenu().GetSenderGUID())
+        return; // Cheating
 
     // remove fake death
     if (GetPlayer()->HasUnitState(UNIT_STATE_DIED))
         GetPlayer()->RemoveAurasByType(SPELL_AURA_FEIGN_DEATH);
 
-    Trainer::Trainer const* trainer = sObjectMgr->GetTrainer(npc->GetEntry());
+    Trainer::Trainer const* trainer = sObjectMgr->GetTrainer(GetCurrentTrainer() ? GetCurrentTrainer() : npc->GetEntry());
     if (!trainer)
         return;
 
@@ -182,6 +191,9 @@ void WorldSession::HandleGossipHelloOpcode(WorldPacket& recvData)
     }
 
     _player->PlayerTalkClass->ClearMenus();
+#ifdef ELUNA
+    if (!sEluna->OnGossipHello(_player, unit))
+#endif
     if (!unit->AI()->OnGossipHello(_player))
     {
 //        _player->TalkedToCreature(unit->GetEntry(), unit->GetGUID());

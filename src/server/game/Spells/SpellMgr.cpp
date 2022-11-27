@@ -19,6 +19,7 @@
 #include "BattlefieldMgr.h"
 #include "BattlegroundMgr.h"
 #include "Chat.h"
+#include "Config.h"
 #include "Containers.h"
 #include "DatabaseEnv.h"
 #include "DBCStores.h"
@@ -3220,7 +3221,8 @@ void SpellMgr::LoadSpellInfoCorrections()
 
     ApplySpellFix({
         42818, // Headless Horseman - Wisp Flight Port
-        42821  // Headless Horseman - Wisp Flight Missile
+        42821, // Headless Horseman - Wisp Flight Missile
+        17678  // Despawn Spectral Combatants
     }, [](SpellInfo* spellInfo)
     {
         spellInfo->RangeEntry = sSpellRangeStore.LookupEntry(6); // 100 yards
@@ -4945,6 +4947,15 @@ void SpellMgr::LoadSpellInfoCorrections()
     ApplySpellFix({ 53659 }, [](SpellInfo* spellInfo)
     {
         spellInfo->RangeEntry = sSpellRangeStore.LookupEntry(5); // 40yd
+    });
+	
+    // Tame Beast
+    ApplySpellFix({ 1515 }, [](SpellInfo* spellInfo)
+    {
+		if (sConfigMgr->GetBoolDefault("Tame.Instant", true))
+		{
+		spellInfo->AttributesEx5 |= SPELL_ATTR5_START_PERIODIC_AT_APPLY;
+		}
     });
 
     for (uint32 i = 0; i < GetSpellInfoStoreSize(); ++i)

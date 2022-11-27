@@ -15,6 +15,17 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+// 1
+// 2
+// 3
+// 4
+// 5
+// 6
+// 7
+// 8
+// 9
+// 10
+
 #include "Player.h"
 #include "AccountMgr.h"
 #include "AchievementMgr.h"
@@ -37,9 +48,11 @@
 #include "CombatPackets.h"
 #include "Common.h"
 #include "ConditionMgr.h"
+#include "Config.h"
 #include "CreatureAI.h"
 #include "DatabaseEnv.h"
 #include "DisableMgr.h"
+#include "DynamicResurrection.h"
 #include "Formulas.h"
 #include "GameClient.h"
 #include "GameEventMgr.h"
@@ -102,6 +115,12 @@
 #include "World.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
+#include <string>
+#include "StringFormat.h"
+#include <numeric>
+#ifdef ELUNA
+#include "LuaEngine.h"
+#endif
 #include "WorldStatePackets.h"
 
 //npcbot
@@ -274,6 +293,12 @@ Player::Player(WorldSession* session): Unit(true)
         m_bgBattlegroundQueueID[j].bgQueueTypeId = BATTLEGROUND_QUEUE_NONE;
         m_bgBattlegroundQueueID[j].invitedToInstance = 0;
     }
+	
+	// PlayedTimeReward
+    ptr_Interval = sConfigMgr->GetIntDefault("PlayedTimeReward.Interval", 0);
+    ptr_Money = sConfigMgr->GetIntDefault("PlayedTimeReward.Money", 0);
+    ptr_Honor = sConfigMgr->GetIntDefault("PlayedTimeReward.Honor", 0);
+    ptr_Arena = sConfigMgr->GetIntDefault("PlayedTimeReward.Arena", 0);
 
     m_logintime = GameTime::GetGameTime();
     m_Last_tick = m_logintime;
@@ -1080,6 +1105,21 @@ void Player::Update(uint32 p_time)
         stmt->setUInt32(3, GetSession()->GetAccountId());
         LoginDatabase.Execute(stmt);
     }
+	
+	// PlayedTimeReward
+    if (ptr_Interval > 0)
+    {
+        if (ptr_Interval <= p_time)
+        {
+            ChatHandler(GetSession()).PSendSysMessage("[PlayedTimeReward] :: You earned rewards for staying online.");
+            ModifyMoney(ptr_Money);
+            ModifyHonorPoints(ptr_Honor);
+            ModifyArenaPoints(ptr_Arena);
+            ptr_Interval = sConfigMgr->GetIntDefault("PlayedTimeReward.Interval", 0);
+        }
+        else
+            ptr_Interval -= p_time;
+    }
 
     if (!m_timedquests.empty())
     {
@@ -1753,7 +1793,10 @@ bool Player::TeleportTo(uint32 mapid, float x, float y, float z, float orientati
     else
     {
         if (GetClass() == CLASS_DEATH_KNIGHT && GetMapId() == 609 && !IsGameMaster() && !HasSpell(50977))
+        {
+            SendTransferAborted(mapid, TRANSFER_ABORT_UNIQUE_MESSAGE, 1);
             return false;
+        }
 
         // far teleport to another map
         Map* oldmap = IsInWorld() ? GetMap() : nullptr;
@@ -2002,7 +2045,8 @@ void Player::SetObjectScale(float scale)
     SetCombatReach(scale * DEFAULT_PLAYER_COMBAT_REACH);
 }
 
-bool Player::IsImmunedToSpellEffect(SpellInfo const* spellInfo, SpellEffectInfo const& spellEffectInfo, WorldObject const* caster) const
+bool Player::IsImmunedToSpellEffect(SpellInfo const* spellInfo, SpellEffectInfo const& spellEffectInfo, WorldObject const* caster,
+    bool requireImmunityPurgesEffectAttribute /*= false*/) const
 {
     // players are immune to taunt (the aura and the spell effect)
     if (spellEffectInfo.IsAura(SPELL_AURA_MOD_TAUNT))
@@ -2010,7 +2054,7 @@ bool Player::IsImmunedToSpellEffect(SpellInfo const* spellInfo, SpellEffectInfo 
     if (spellEffectInfo.IsEffect(SPELL_EFFECT_ATTACK_ME))
         return true;
 
-    return Unit::IsImmunedToSpellEffect(spellInfo, spellEffectInfo, caster);
+    return Unit::IsImmunedToSpellEffect(spellInfo, spellEffectInfo, caster, requireImmunityPurgesEffectAttribute);
 }
 
 //NPCBOT
@@ -2970,6 +3014,32 @@ void Player::InitStatsForLevel(bool reapplyMods)
     SetFullPower(POWER_FOCUS);
     SetPower(POWER_HAPPINESS, 0);
     SetPower(POWER_RUNIC_POWER, 0);
+	
+if (sConfigMgr->GetBoolDefault("DungeonStatsReward.Enable", true))
+		{
+QueryResult Dungeonstatsresult = CharacterDatabase.PQuery("SELECT `Strength`, `Agility`, `Stamina`, `Intellect`, `Spirit`, `SpellPower`, `AttackPower`, `RAttackPower` FROM `stats_from_dungeons` WHERE `GUID` = %u", GetGUID());
+	//skulystats
+	if (!Dungeonstatsresult)
+			{
+				CharacterDatabase.DirectPExecute("INSERT INTO `stats_from_dungeons` (GUID) VALUES (%u)", GetGUID());
+			}
+	else
+{
+
+	HandleStatFlatModifier(UnitMods(STAT_STRENGTH), TOTAL_VALUE, (*Dungeonstatsresult)[0].GetFloat(), true);
+	HandleStatFlatModifier(UnitMods(STAT_AGILITY), TOTAL_VALUE, (*Dungeonstatsresult)[1].GetFloat(), true);
+	HandleStatFlatModifier(UnitMods(STAT_STAMINA), TOTAL_VALUE, (*Dungeonstatsresult)[2].GetFloat(), true);
+	HandleStatFlatModifier(UnitMods(STAT_INTELLECT), TOTAL_VALUE, (*Dungeonstatsresult)[3].GetFloat(), true);
+	HandleStatFlatModifier(UnitMods(STAT_SPIRIT), TOTAL_VALUE, (*Dungeonstatsresult)[4].GetFloat(), true);
+	ApplySpellPowerBonus(int32((*Dungeonstatsresult)[5].GetUInt32()), true);
+	HandleStatFlatModifier(UnitMods(UNIT_MOD_ATTACK_POWER), TOTAL_VALUE, (*Dungeonstatsresult)[6].GetFloat(), true);
+	HandleStatFlatModifier(UnitMods(UNIT_MOD_ATTACK_POWER_RANGED), TOTAL_VALUE, (*Dungeonstatsresult)[7].GetFloat(), true);
+
+}
+
+		}
+		
+		
 
     // update level to hunter/summon pet
     if (Pet* pet = GetPet())
@@ -4707,6 +4777,9 @@ void Player::ResurrectPlayer(float restore_percent, bool applySickness)
     // recast lost by death auras of any items held in the inventory
     CastAllObtainSpells();
 
+#ifdef ELUNA
+    sEluna->OnResurrect(this);
+#endif
     if (!applySickness)
         return;
 
@@ -5114,7 +5187,22 @@ void Player::RepopAtGraveyard()
     // and don't show spirit healer location
     if (ClosestGrave)
     {
-        TeleportTo(ClosestGrave->Continent, ClosestGrave->Loc.X, ClosestGrave->Loc.Y, ClosestGrave->Loc.Z, GetOrientation(), shouldResurrect ? TELE_REVIVE_AT_TELEPORT : 0);
+        if (sConfigMgr->GetBoolDefault("Dynamic.Resurrections.enable", true))
+        {
+            if (sDynRes->IsInDungeonOrRaid(this) && sDynRes->CheckForSpawnPoint(this))
+            {
+                sDynRes->DynamicResurrection(this);
+            }
+            else
+            {
+                TeleportTo(ClosestGrave->Continent, ClosestGrave->Loc.X, ClosestGrave->Loc.Y, ClosestGrave->Loc.Z, GetOrientation(), shouldResurrect ? TELE_REVIVE_AT_TELEPORT : 0);
+            }
+        }
+        else
+        {
+            TeleportTo(ClosestGrave->Continent, ClosestGrave->Loc.X, ClosestGrave->Loc.Y, ClosestGrave->Loc.Z, GetOrientation(), shouldResurrect ? TELE_REVIVE_AT_TELEPORT : 0);
+        }
+
         if (isDead())                                        // not send if alive, because it used in TeleportTo()
         {
             WorldPackets::Misc::DeathReleaseLoc packet;
@@ -6871,7 +6959,7 @@ bool Player::RewardHonor(Unit* victim, uint32 groupsize, int32 honor, bool pvpto
             return false;
 
         victim_guid = victim->GetGUID();
-
+		int gold = 10000; //elite honor patch gold
         if (Player* plrVictim = victim->ToPlayer())
         {
             if (GetTeam() == plrVictim->GetTeam() && !sWorld->IsFFAPvPRealm())
@@ -6917,6 +7005,162 @@ bool Player::RewardHonor(Unit* victim, uint32 groupsize, int32 honor, bool pvpto
             UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_HONORABLE_KILL_AT_AREA, GetAreaId());
             UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_HONORABLE_KILL, 1, 0, victim);
             UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_SPECIAL_PVP_KILL, 1, 0, victim);
+        }
+		// guard elite honor patch
+		else if (sWorld->getBoolConfig(CONFIG_GAIN_HONOR_GUARD) && victim->ToCreature()->IsGuard())
+        {
+            uint8 k_level = GetLevel();
+            uint8 k_grey = Trinity::XP::GetGrayLevel(k_level);
+            uint8 v_level = victim->GetLevel();
+
+            if (v_level <= k_grey)
+                return false;
+
+            uint32 victim_title = 0;
+            victim_guid = ObjectGuid::Empty;
+			int gbonus = sWorld->getIntConfig(CONFIG_GAIN_HONOR_GUARD_BONUS);
+            honor_f = ceil(Trinity::Honor::hk_honor_at_level_f(k_level) * (v_level - k_grey) / (k_level - k_grey) + gbonus);
+
+            // count the number of playerkills in one day
+            ApplyModUInt32Value(PLAYER_FIELD_KILLS, 1, true);
+            // and those in a lifetime
+            ApplyModUInt32Value(PLAYER_FIELD_LIFETIME_HONORABLE_KILLS, 1, true);
+            UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_EARN_HONORABLE_KILL);
+            UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_HK_CLASS, victim->GetClass());
+            UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_HK_RACE, victim->GetRace());
+            UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_HONORABLE_KILL_AT_AREA, GetAreaId());
+            UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_HONORABLE_KILL, 1, 0, victim);
+			int ghonor = honor_f;
+			
+			std::string guardmsg = "You received " + std::to_string(ghonor) + " Honor for killing a Guard.";
+			std::string guardmsgap = "You received " + std::to_string(ghonor) + " Honor and Arena Points for killing a Guard.";
+			
+			const char * sgm = guardmsg.c_str();
+			const char * sgm_ap = guardmsgap.c_str();
+			if (sWorld->getBoolConfig(CONFIG_GAIN_HONOR_GUARD_AP))
+			{
+			ChatHandler(GetSession()).PSendSysMessage(sgm_ap);
+			ModifyArenaPoints(int32(ghonor));
+			}
+			else
+			{
+			ChatHandler(GetSession()).PSendSysMessage(sgm);
+			}
+			
+			if (sWorld->getIntConfig(CONFIG_GAIN_HONOR_GUARD_GOLD) > 0)
+			{
+				int guardgold = sWorld->getIntConfig(CONFIG_GAIN_HONOR_GUARD_GOLD);
+				int guardgoldlevel = sWorld->getIntConfig(CONFIG_GAIN_GOLD_MINLEVEL);
+				uint8 playerlevel = GetLevel();
+				std::string guardgoldmsg = "You received " + std::to_string(guardgold) + " Gold for killing a Guard.";
+				const char * sgm_gold = guardgoldmsg.c_str();
+				if (playerlevel >= guardgoldlevel)
+				{
+				ChatHandler(GetSession()).PSendSysMessage(sgm_gold);
+				ModifyMoney(gold * guardgold);
+				}
+				
+			}
+        }
+        else if (sWorld->getBoolConfig(CONFIG_GAIN_HONOR_ELITE) && victim->ToCreature()->isElite() && !victim->ToCreature()->isWorldBoss() && !victim->ToCreature()->IsGuard())
+        {
+            uint8 k_level = GetLevel();
+            uint8 k_grey = Trinity::XP::GetGrayLevel(k_level);
+            uint8 v_level = victim->GetLevel();
+
+            if (v_level <= k_grey)
+                return false;
+
+            uint32 victim_title = 0;
+            victim_guid = ObjectGuid::Empty;
+			int ebonus = sWorld->getIntConfig(CONFIG_GAIN_HONOR_ELITE_BONUS);
+            honor_f = ceil(Trinity::Honor::hk_honor_at_level_f(k_level) * (v_level - k_grey) / (k_level - k_grey) + ebonus);
+            // count the number of playerkills in one day
+            ApplyModUInt32Value(PLAYER_FIELD_KILLS, 1, true);
+
+            // and those in a lifetime
+            ApplyModUInt32Value(PLAYER_FIELD_LIFETIME_HONORABLE_KILLS, 1, true);
+            UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_EARN_HONORABLE_KILL);
+            UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_HK_CLASS, victim->GetClass());
+            UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_HK_RACE, victim->GetRace());
+            UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_HONORABLE_KILL_AT_AREA, GetAreaId());
+            UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_HONORABLE_KILL, 1, 0, victim);
+			int ghonor = honor_f;
+		
+			std::string elitemsg = "You received " + std::to_string(ghonor) + " Honor for killing an Elite.";
+			std::string elitemsgap = "You received " + std::to_string(ghonor) + " Honor and Arena Points for killing an Elite.";
+			
+			
+			const char * sem = elitemsg.c_str();
+			const char * sem_ap = elitemsgap.c_str();
+			if (sWorld->getBoolConfig(CONFIG_GAIN_HONOR_ELITE_AP))
+			{
+			ChatHandler(GetSession()).PSendSysMessage(sem_ap);
+			ModifyArenaPoints(int32(ghonor));
+			}
+			else
+			{
+			ChatHandler(GetSession()).PSendSysMessage(sem);
+			}
+			
+			if (sWorld->getIntConfig(CONFIG_GAIN_HONOR_ELITE_GOLD) > 0)
+			{
+				int elitegold = sWorld->getIntConfig(CONFIG_GAIN_HONOR_ELITE_GOLD);
+				std::string elitegoldmsg = "You received " + std::to_string(elitegold) + " Gold for killing an Elite.";
+				const char * sem_gold = elitegoldmsg.c_str();
+				ChatHandler(GetSession()).PSendSysMessage(sem_gold);
+				ModifyMoney(gold * elitegold);
+			}
+        }
+		else if (sWorld->getBoolConfig(CONFIG_GAIN_HONOR_BOSS) && victim->ToCreature()->isWorldBoss())
+        {
+            uint8 k_level = GetLevel();
+            uint8 k_grey = Trinity::XP::GetGrayLevel(k_level);
+            uint8 v_level = victim->GetLevel();
+
+            if (v_level <= k_grey)
+                return false;
+
+            uint32 victim_title = 0;
+            victim_guid = ObjectGuid::Empty;
+			int bbonus = sWorld->getIntConfig(CONFIG_GAIN_HONOR_BOSS_BONUS);
+            honor_f = ceil(Trinity::Honor::hk_honor_at_level_f(k_level) * (v_level - k_grey) / (k_level - k_grey) + bbonus);
+            // count the number of playerkills in one day
+            ApplyModUInt32Value(PLAYER_FIELD_KILLS, 1, true);
+
+            // and those in a lifetime
+            ApplyModUInt32Value(PLAYER_FIELD_LIFETIME_HONORABLE_KILLS, 1, true);
+            UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_EARN_HONORABLE_KILL);
+            UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_HK_CLASS, victim->GetClass());
+            UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_HK_RACE, victim->GetRace());
+            UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_HONORABLE_KILL_AT_AREA, GetAreaId());
+            UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_HONORABLE_KILL, 1, 0, victim);
+			int bhonor = honor_f;
+		
+			std::string bossmsg = "You received " + std::to_string(bhonor) + " Honor for killing a Boss.";
+			std::string bossmsgap = "You received " + std::to_string(bhonor) + " Honor and Arena Points for killing a Boss.";
+			
+			
+			const char * sbm = bossmsg.c_str();
+			const char * sbm_ap = bossmsgap.c_str();
+			if (sWorld->getBoolConfig(CONFIG_GAIN_HONOR_BOSS_AP))
+			{
+			ChatHandler(GetSession()).PSendSysMessage(sbm_ap);
+			ModifyArenaPoints(int32(bhonor));
+			}
+			else
+			{
+			ChatHandler(GetSession()).PSendSysMessage(sbm);
+			}
+			
+			if (sWorld->getIntConfig(CONFIG_GAIN_HONOR_BOSS_GOLD) > 0)
+			{
+				int bossgold = sWorld->getIntConfig(CONFIG_GAIN_HONOR_BOSS_GOLD);
+				std::string bossgoldmsg = "You received " + std::to_string(bossgold) + " Gold for killing a Boss.";
+				const char * sbm_gold = bossgoldmsg.c_str();
+				ChatHandler(GetSession()).PSendSysMessage(sbm_gold);
+				ModifyMoney(gold * bossgold);
+			}
         }
         //npcbot: honor for bots
         else if (victim->ToCreature()->IsNPCBot() && !victim->ToCreature()->IsTempBot())
@@ -7481,9 +7725,24 @@ void Player::_ApplyItemBonuses(ItemTemplate const* proto, uint8 slot, bool apply
 
     ScalingStatDistributionEntry const* ssd = GetScalingStatDistributionFor(*proto);
     ScalingStatValuesEntry const* ssv = GetScalingStatValuesFor(*proto);
+	
     if (only_level_scale && (!ssd || !ssv))
         return;
 
+    uint32 statcount = proto->StatsCount;
+    ReforgeData* reforgeData = NULL;
+    bool decreased = false;
+    if (statcount < MAX_ITEM_PROTO_STATS)
+    {
+        if (Item* invItem = GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+        {
+            if (reforgeMap.find(invItem->GetGUID().GetCounter()) != reforgeMap.end())
+            {
+                reforgeData = &reforgeMap[invItem->GetGUID().GetCounter()];
+                ++statcount;
+            }
+        }
+    }
     for (uint8 i = 0; i < MAX_ITEM_PROTO_STATS; ++i)
     {
         uint32 statType = 0;
@@ -7498,10 +7757,24 @@ void Player::_ApplyItemBonuses(ItemTemplate const* proto, uint8 slot, bool apply
         }
         else
         {
-            if (i >= proto->StatsCount)
+            if (i >= statcount)
                 continue;
             statType = proto->ItemStat[i].ItemStatType;
             val = proto->ItemStat[i].ItemStatValue;
+
+            if (reforgeData)
+            {
+                if(i == statcount-1)
+                {
+                    statType = reforgeData->increase;
+                    val = reforgeData->stat_value;
+                }
+                else if (!decreased && reforgeData->decrease == statType)
+                {
+                    val -= reforgeData->stat_value;
+                    decreased = true;
+                }
+            }
         }
 
         if (val == 0)
@@ -11918,6 +12191,12 @@ InventoryResult Player::CanUseItem(ItemTemplate const* proto) const
         if (HasSpell(proto->Spells[1].SpellId))
             return EQUIP_ERR_NONE;
 
+#ifdef ELUNA
+    InventoryResult eres = sEluna->OnCanUseItem(this, proto->ItemId);
+    if (eres != EQUIP_ERR_OK)
+        return eres;
+#endif
+
     return EQUIP_ERR_OK;
 }
 
@@ -12341,6 +12620,9 @@ Item* Player::EquipItem(uint16 pos, Item* pItem, bool update)
 
         ApplyEquipCooldown(pItem2);
 
+#ifdef ELUNA
+        sEluna->OnEquip(this, pItem2, bag, slot);
+#endif
         return pItem2;
     }
 
@@ -12351,6 +12633,9 @@ Item* Player::EquipItem(uint16 pos, Item* pItem, bool update)
     UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_EQUIP_ITEM, pItem->GetEntry());
     UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_EQUIP_EPIC_ITEM, slot, pItem->GetEntry());
 
+#ifdef ELUNA
+        sEluna->OnEquip(this, pItem, bag, slot);
+#endif
     return pItem;
 }
 
@@ -12375,6 +12660,10 @@ void Player::QuickEquipItem(uint16 pos, Item* pItem)
 
         UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_EQUIP_ITEM, pItem->GetEntry());
         UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_EQUIP_EPIC_ITEM, slot, pItem->GetEntry());
+
+#ifdef ELUNA
+        sEluna->OnEquip(this, pItem, (pos >> 8), slot);
+#endif
     }
 }
 
@@ -12507,12 +12796,15 @@ void Player::RemoveItem(uint8 bag, uint8 slot, bool update)
     }
 }
 
+extern void RemoveReforge(Player* player, uint32 itemguid, bool update);
+
 // Common operation need to remove item from inventory without delete in trade, auction, guild bank, mail....
 void Player::MoveItemFromInventory(uint8 bag, uint8 slot, bool update)
 {
     if (Item* it = GetItemByPos(bag, slot))
     {
         RemoveItem(bag, slot, update);
+		RemoveReforge(this, it->GetGUID().GetCounter(), true);
         ItemRemovedQuestCheck(it->GetEntry(), it->GetCount());
         it->SetNotRefundable(this, false);
         RemoveItemFromUpdateQueueOf(it, this);
@@ -14371,7 +14663,8 @@ void Player::PrepareGossipMenu(WorldObject* source, uint32 menuId /*= 0*/, bool 
                     break;
                 case GOSSIP_OPTION_TRAINER:
                 {
-                    Trainer::Trainer const* trainer = sObjectMgr->GetTrainer(creature->GetEntry());
+                    //Trainer::Trainer const* trainer = sObjectMgr->GetTrainer(creature->GetEntry());
+					Trainer::Trainer const* trainer = sObjectMgr->GetTrainer(itr->second.ActionMenuID ? itr->second.ActionMenuID : creature->GetEntry());
                     if (!trainer || !trainer->IsTrainerValidForPlayer(this))
                     {
                         TC_LOG_ERROR("sql.sql", "GOSSIP_OPTION_TRAINER:: Player %s %s requested wrong gossip menu: %u at Creature: %s (Entry: %u)",
@@ -14559,7 +14852,8 @@ void Player::OnGossipSelect(WorldObject* source, uint32 gossipListId, uint32 men
             GetSession()->SendStablePet(guid);
             break;
         case GOSSIP_OPTION_TRAINER:
-            GetSession()->SendTrainerList(source->ToCreature());
+            //GetSession()->SendTrainerList(source->ToCreature());
+			GetSession()->SendTrainerList(source->ToCreature(), menuItemData->GossipActionMenuId);
             break;
         case GOSSIP_OPTION_LEARNDUALSPEC:
             if (GetSpecsCount() == 1 && GetLevel() >= sWorld->getIntConfig(CONFIG_MIN_DUALSPEC_LEVEL))
@@ -15039,7 +15333,12 @@ void Player::AddQuestAndCheckCompletion(Quest const* quest, Object* questGiver)
     {
         case TYPEID_UNIT:
             PlayerTalkClass->ClearMenus();
+
+#ifdef ELUNA
+            sEluna->OnQuestAccept(this, questGiver->ToCreature(), quest);
+#endif
             questGiver->ToCreature()->AI()->OnQuestAccept(this, quest);
+
             break;
         case TYPEID_ITEM:
         case TYPEID_CONTAINER:
@@ -15071,7 +15370,12 @@ void Player::AddQuestAndCheckCompletion(Quest const* quest, Object* questGiver)
         }
         case TYPEID_GAMEOBJECT:
             PlayerTalkClass->ClearMenus();
+
+#ifdef ELUNA
+            sEluna->OnQuestAccept(this, questGiver->ToGameObject(), quest);
+#endif
             questGiver->ToGameObject()->AI()->OnQuestAccept(this, quest);
+
             break;
         default:
             break;
@@ -16192,6 +16496,9 @@ QuestGiverStatus Player::GetQuestDialogStatus(Object* questgiver)
     {
         case TYPEID_GAMEOBJECT:
         {
+#ifdef ELUNA
+            sEluna->GetDialogStatus(this, questgiver->ToGameObject());
+#endif
             if (auto ai = questgiver->ToGameObject()->AI())
                 if (auto questStatus = ai->GetDialogStatus(this))
                     return *questStatus;
@@ -16201,6 +16508,9 @@ QuestGiverStatus Player::GetQuestDialogStatus(Object* questgiver)
         }
         case TYPEID_UNIT:
         {
+#ifdef ELUNA
+            sEluna->GetDialogStatus(this, questgiver->ToCreature());
+#endif
             if (auto ai = questgiver->ToCreature()->AI())
                 if (auto questStatus = ai->GetDialogStatus(this))
                     return *questStatus;
@@ -16601,6 +16911,155 @@ void Player::KilledMonsterCredit(uint32 entry, ObjectGuid guid /*= ObjectGuid::E
             }
         }
     }
+	
+	//skulystats
+	if (sConfigMgr->GetBoolDefault("DungeonStatsReward.Enable", true))
+						{
+								bool const isDungeon = sMapStore.LookupEntry(GetMapId())->IsDungeon();
+								std::ostringstream ss;
+								std::ostringstream ss2;
+								float minamount;
+                                float maxamount;
+
+						if (killed != nullptr)
+						{
+						if (Creature* victim = killed->ToCreature())
+							{
+										int nonbossroll = irand(1, 100);
+										int percentage = sConfigMgr->GetIntDefault("DungeonStatsReward.Chance", 0);
+
+										if (percentage > 100)
+										{
+											percentage = 100;
+										}
+
+										if (percentage < 1)
+										{
+											percentage = 1;
+										}
+
+										if (((nonbossroll <= percentage && !victim->IsDungeonBoss()) || victim->IsDungeonBoss()) && isDungeon)
+										{
+
+										if ((victim->isElite() && sConfigMgr->GetBoolDefault("DungeonStatsReward.Elite.NPCs", true)) || (!victim->isElite() && sConfigMgr->GetBoolDefault("DungeonStatsReward.Normal.NPCs", true)) || victim->IsDungeonBoss())
+										{
+										QueryResult GDungeonstatsresult = CharacterDatabase.PQuery("SELECT `Strength`, `Agility`, `Stamina`, `Intellect`, `Spirit`, `SpellPower`, `AttackPower`, `RAttackPower` FROM `stats_from_dungeons` WHERE `GUID` = %u", GetGUID());
+
+										if (victim->IsDungeonBoss())
+										{
+										minamount = sConfigMgr->GetFloatDefault("DungeonStatsReward.MinAmountBoss", 1.0f);
+										maxamount = sConfigMgr->GetFloatDefault("DungeonStatsReward.MaxAmountBoss", 1.0f);
+										}
+										else if (victim->isElite())
+										{
+										minamount = sConfigMgr->GetFloatDefault("DungeonStatsReward.MinAmountElite", 1.0f);
+										maxamount = sConfigMgr->GetFloatDefault("DungeonStatsReward.MaxAmountElite", 1.0f);
+										}
+										else
+										{
+										minamount = sConfigMgr->GetFloatDefault("DungeonStatsReward.MinAmountNormal", 1.0f);
+										maxamount = sConfigMgr->GetFloatDefault("DungeonStatsReward.MaxAmountNormal", 1.0f);
+										}
+
+										if (maxamount < 1.0f)
+										{
+											maxamount = 1.0f;
+										}
+										
+										int memberguid = GetGUID();
+										float Rollpoints = irand(minamount, maxamount );
+
+										int chatpoints = int(Rollpoints);
+
+										int Rollstat = irand(1, 8);
+
+
+
+											float GQStrengthDB = (*GDungeonstatsresult)[0].GetFloat();
+											float GQAgilityDB = (*GDungeonstatsresult)[1].GetFloat();
+											float GQStaminaDB = (*GDungeonstatsresult)[2].GetFloat();
+											float GQIntellectDB = (*GDungeonstatsresult)[3].GetFloat();
+											float GQSpiritDB = (*GDungeonstatsresult)[4].GetFloat();
+
+
+											uint32 GQSpellDB = (*GDungeonstatsresult)[5].GetUInt32();
+											float GQAPDB = (*GDungeonstatsresult)[6].GetFloat();
+											float GQRAPDB = (*GDungeonstatsresult)[7].GetFloat();
+											float DBValue;
+											uint32 DBUintValue;
+											QueryResult Dungeonstatsresult = CharacterDatabase.PQuery("SELECT `Strength`, `Agility`, `Stamina`, `Intellect`, `Spirit`, `SpellPower`, `AttackPower`, `RAttackPower` FROM `stats_from_dungeons` WHERE `GUID` = %u", GetGUID());
+											std::ostringstream ss;
+											std::string statchosen;
+											if (Rollstat == 1)
+											{
+											statchosen = "Strength";
+											DBValue = GQStrengthDB;
+											ss << "You gained|cffFF8000 %i |rStrength.";
+											HandleStatFlatModifier(UnitMods(STAT_STRENGTH), TOTAL_VALUE, Rollpoints, true);
+											}
+											if (Rollstat == 2)
+											{
+											statchosen = "Agility";
+											DBValue = GQAgilityDB;
+											ss << "You gained|cffFF8000 %i |rAgility.";
+											HandleStatFlatModifier(UnitMods(STAT_AGILITY), TOTAL_VALUE, Rollpoints, true);
+											}
+											if (Rollstat == 3)
+											{
+											statchosen = "Stamina";
+											DBValue = GQStaminaDB;
+											ss << "You gained|cffFF8000 %i |rStamina.";
+											HandleStatFlatModifier(UnitMods(STAT_STAMINA), TOTAL_VALUE, Rollpoints, true);
+											}
+											if (Rollstat == 4)
+											{
+											statchosen = "Intellect";
+											DBValue = GQIntellectDB;
+											ss << "You gained|cffFF8000 %i |rIntellect.";
+											HandleStatFlatModifier(UnitMods(STAT_INTELLECT), TOTAL_VALUE, Rollpoints, true);
+											}
+											if (Rollstat == 5)
+											{
+											statchosen = "Spirit";
+											DBValue = GQSpiritDB;
+											ss << "You gained|cffFF8000 %i |rSpirit.";
+											HandleStatFlatModifier(UnitMods(STAT_SPIRIT), TOTAL_VALUE, Rollpoints, true);
+											}
+											if (Rollstat == 6)
+											{
+											statchosen = "SpellPower";
+											DBUintValue = GQSpellDB;
+											ss << "You gained|cffFF8000 %i |rSpell Power.";
+											ApplySpellPowerBonus(Rollpoints, true);
+											{CharacterDatabase.DirectPExecute("UPDATE `stats_from_dungeons` SET %s = %u WHERE GUID = %u", statchosen, DBUintValue + uint32(Rollpoints), memberguid);}
+											}
+											if (Rollstat == 7)
+											{
+											statchosen = "AttackPower";
+											DBValue = GQAPDB;
+											ss << "You gained|cffFF8000 %i |rAttack Power.";
+											HandleStatFlatModifier(UNIT_MOD_ATTACK_POWER, TOTAL_VALUE, Rollpoints, true);
+											}
+											if (Rollstat == 8)
+											{
+											statchosen = "RAttackPower";
+											DBValue = GQRAPDB;
+											ss << "You gained|cffFF8000 %i |rRanged Attack Power.";
+											HandleStatFlatModifier(UNIT_MOD_ATTACK_POWER_RANGED, TOTAL_VALUE, Rollpoints, true);
+											}
+											if (Rollstat != 6)
+											{
+											{CharacterDatabase.DirectPExecute("UPDATE `stats_from_dungeons` SET %s = %f WHERE GUID = %u", statchosen, DBValue + Rollpoints, memberguid);}
+											}
+											ChatHandler(GetSession()).PSendSysMessage(ss.str().c_str(), chatpoints);
+										}
+
+
+							}
+					}
+						}
+						}
+
 }
 
 void Player::KilledPlayerCredit(uint16 count)
@@ -22152,9 +22611,12 @@ void Player::UpdatePvP(bool state, bool _override)
 
 void Player::UpdatePotionCooldown(Spell* spell)
 {
-    // no potion used i combat or still in combat
-    if (!m_lastPotionId || IsInCombat())
-        return;
+    // no potion used in combat or still in combat
+    //if (!m_lastPotionId || IsInCombat())
+        //return;
+	if (sWorld->getBoolConfig(CONFIG_POTIONS_LIMIT))
+		if (!m_lastPotionId || IsInCombat())
+       return;
 
     // Call not from spell cast, send cooldown event for item spells if no in combat
     if (!spell)
@@ -22868,12 +23330,18 @@ void Player::SendInitialPacketsBeforeAddToMap()
 
     /// SMSG_EQUIPMENT_SET_LIST
     SendEquipmentSetList();
+	
+	//Custom Speed Game
+	float speedrate = sWorld->getFloatConfig(CONFIG_SPEED_GAME);
+	uint32 speedtime = ((GameTime::GetGameTime() - GameTime::GetUptime()) + (GameTime::GetUptime() * speedrate));
 
     /// SMSG_LOGIN_SET_TIME_SPEED
-    static float const TimeSpeed = 0.01666667f;
+    //static float const TimeSpeed = 0.01666667f;
+	static float const TimeSpeed = 0.01666667f * speedrate; //Custom Speed Game
     WorldPackets::Misc::LoginSetTimeSpeed loginSetTimeSpeed;
     loginSetTimeSpeed.NewSpeed = TimeSpeed;
-    loginSetTimeSpeed.GameTime = GameTime::GetGameTime();
+    //loginSetTimeSpeed.GameTime = GameTime::GetGameTime();
+	loginSetTimeSpeed.GameTime = speedtime; //Custom Speed Game
     loginSetTimeSpeed.GameTimeHolidayOffset = 0; /// @todo
     SendDirectMessage(loginSetTimeSpeed.Write());
 
@@ -24067,6 +24535,7 @@ bool Player::GetsRecruitAFriendBonus(bool forXP)
 void Player::RewardPlayerAndGroupAtKill(Unit* victim, bool isBattleGround)
 {
     KillRewarder(this, victim, isBattleGround).Reward();
+
 }
 
 void Player::RewardPlayerAndGroupAtEvent(uint32 creature_id, WorldObject* pRewardSource)
@@ -25004,8 +25473,16 @@ void Player::StoreLootItem(uint8 lootSlot, Loot* loot)
 
     if (!item || item->is_looted)
     {
-        SendEquipError(EQUIP_ERR_ALREADY_LOOTED, nullptr, nullptr);
-        return;
+        if (sConfigMgr->GetBoolDefault("AOE.LOOT.enable", true))
+        {
+            //SendEquipError(EQUIP_ERR_ALREADY_LOOTED, nullptr, nullptr); prevents error already loot from spamming
+            return;
+        }
+        else
+        {
+            SendEquipError(EQUIP_ERR_ALREADY_LOOTED, nullptr, nullptr);
+            return;
+        }
     }
 
     if (!item->AllowedForPlayer(this))
@@ -25076,6 +25553,9 @@ void Player::StoreLootItem(uint8 lootSlot, Loot* loot)
         if (loot->containerID > 0)
             sLootItemStorage->RemoveStoredLootItemForContainer(loot->containerID, item->itemid, item->count, item->itemIndex);
 
+#ifdef ELUNA
+        sEluna->OnLootItem(this, newitem, item->count, this->GetLootGUID());
+#endif
     }
     else
         SendEquipError(msg, nullptr, nullptr, item->itemid);
@@ -25491,6 +25971,10 @@ void Player::LearnTalent(uint32 talentId, uint32 talentRank)
 
     // update free talent points
     SetFreeTalentPoints(CurTalentPoints - (talentRank - curtalent_maxrank + 1));
+
+#ifdef ELUNA
+    sEluna->OnLearnTalents(this, talentId, talentRank, spellid);
+#endif
 }
 
 void Player::LearnPetTalent(ObjectGuid petGuid, uint32 talentId, uint32 talentRank)
@@ -26472,14 +26956,16 @@ void Player::SendRefundInfo(Item* item)
     SendDirectMessage(&data);
 }
 
-bool Player::AddItem(uint32 itemId, uint32 count)
+bool Player::AddItem(uint32 itemId, uint32 count, InventoryResult* error)
 {
     uint32 noSpaceForCount = 0;
     ItemPosCountVec dest;
     InventoryResult msg = CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, itemId, count, &noSpaceForCount);
     if (msg != EQUIP_ERR_OK)
         count -= noSpaceForCount;
-
+		if (error)
+        *error = msg;
+	
     if (count == 0 || dest.empty())
     {
         /// @todo Send to mailbox if no space
@@ -26973,7 +27459,7 @@ Pet* Player::SummonPet(uint32 entry, float x, float y, float z, float ang, PetTy
             pet->SetPower(POWER_MANA, pet->GetMaxPower(POWER_MANA));
             pet->SetPetNameTimestamp(uint32(GameTime::GetGameTime())); // cast can't be helped in this case
             break;
-        default:
+		default:
             break;
     }
 
@@ -26981,18 +27467,20 @@ Pet* Player::SummonPet(uint32 entry, float x, float y, float z, float ang, PetTy
 
     ASSERT(!petStable.CurrentPet && (petType != HUNTER_PET || !petStable.GetUnslottedHunterPet()));
     pet->FillPetInfo(&petStable.CurrentPet.emplace());
-
-    switch (petType)
-    {
-        case SUMMON_PET:
-            pet->InitPetCreateSpells();
-            pet->InitTalentForLevel();
-            pet->SavePetToDB(PET_SAVE_AS_CURRENT);
-            PetSpellInitialize();
-            break;
-        default:
-            break;
-    }
+		
+		switch (petType)
+		{
+			case SUMMON_PET:
+				pet->InitPetCreateSpells();
+				pet->InitTalentForLevel();
+				pet->SavePetToDB(PET_SAVE_AS_CURRENT);
+				PetSpellInitialize();
+				break;
+			default:
+				break;
+		}
+		
+	
 
     if (petType == SUMMON_PET)
     {

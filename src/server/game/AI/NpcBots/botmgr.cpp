@@ -47,6 +47,7 @@ uint32 _npcBotEngageDelayDPS_default;
 uint32 _npcBotEngageDelayHeal_default;
 uint32 _npcBotOwnerExpireTime;
 bool _enableNpcBots;
+bool _enableNotGroupedBotsDungeons;
 bool _enableNpcBotsDungeons;
 bool _enableNpcBotsRaids;
 bool _enableNpcBotsBGs;
@@ -194,6 +195,7 @@ void BotMgr::LoadConfig(bool reload)
         return;
 
     _enableNpcBots                  = sConfigMgr->GetBoolDefault("NpcBot.Enable", true);
+	_enableNotGroupedBotsDungeons 	= sConfigMgr->GetBoolDefault("NpcBot.Not.Grouped.Dungeon.Enable", true);
     _maxNpcBots                     = sConfigMgr->GetIntDefault("NpcBot.MaxBots", 1);
     _maxClassNpcBots                = sConfigMgr->GetIntDefault("NpcBot.MaxBotsPerClass", 1);
     _filterRaces                    = sConfigMgr->GetBoolDefault("NpcBot.Botgiver.FilterRaces", false);
@@ -255,7 +257,7 @@ void BotMgr::LoadConfig(bool reload)
     if (uint8 interFlags = (_noDpsTargetIconFlags & dpsFlags))
     {
         _noDpsTargetIconFlags &= ~interFlags;
-        TC_LOG_ERROR("scripts", "BotMgr::LoadConfig: _noDpsTargetIconFlags intersects with targets flags 0x%02X! Removed, new mask: 0x%02X",
+        TC_LOG_ERROR("scripts", "BotMgr::LoadConfig: NoDPSTargetIconMask intersects with dps targets flags 0x%02X! Removed, new mask: 0x%02X",
             uint32(interFlags), uint32(_noDpsTargetIconFlags));
     }
 
@@ -601,14 +603,16 @@ bool BotMgr::RestrictBots(Creature const* bot, bool add) const
 
     if (LimitBots(currMap))
     {
+		
         //if bot is not in instance group - deny (only if trying to teleport to instance)
         if (add)
-            if (!_owner->GetGroup() || !_owner->GetGroup()->IsMember(bot->GetGUID()))
+            if (!_enableNotGroupedBotsDungeons && (!_owner->GetGroup() || !_owner->GetGroup()->IsMember(bot->GetGUID())))
                 return true;
 
         InstanceMap const* map = currMap->ToInstanceMap();
-        if (map->GetPlayersCountExceptGMs() + uint32(add) > map->GetMaxPlayers())
+        if (!_enableNotGroupedBotsDungeons && (map->GetPlayersCountExceptGMs() + uint32(add) > map->GetMaxPlayers()))
             return true;
+		
     }
 
     return false;
@@ -1533,6 +1537,11 @@ void BotMgr::OnVehicleAttackedBy(Unit* attacker, Unit const* victim)
             if (Creature const* bot = itr->second)
                 bot->GetBotAI()->OnOwnerVehicleDamagedBy(attacker);
     }
+}
+
+void BotMgr::OnBotDamageTaken(Unit* attacker, Unit* victim, uint32 damage, CleanDamage const* cleanDamage, DamageEffectType damagetype, SpellInfo const* spellInfo)
+{
+    victim->ToCreature()->GetBotAI()->OnBotDamageTaken(attacker, damage, cleanDamage , damagetype, spellInfo);
 }
 
 void BotMgr::OnBotDamageDealt(Unit* attacker, Unit* victim, uint32 damage, CleanDamage const* cleanDamage, DamageEffectType damagetype, SpellInfo const* spellInfo)

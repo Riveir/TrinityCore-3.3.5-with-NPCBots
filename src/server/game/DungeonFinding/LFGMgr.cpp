@@ -17,6 +17,7 @@
 
 #include "LFGMgr.h"
 #include "Common.h"
+#include "Config.h"
 #include "DatabaseEnv.h"
 #include "DBCStores.h"
 #include "DisableMgr.h"
@@ -47,6 +48,8 @@
 #include "Creature.h"
 //end npcbot
 
+int8 DESERTER_CONF;
+
 namespace lfg
 {
 
@@ -63,7 +66,8 @@ LFGDungeonData::LFGDungeonData(LFGDungeonEntry const* dbc) : id(dbc->ID), name(d
 }
 
 LFGMgr::LFGMgr(): m_QueueTimer(0), m_lfgProposalId(1),
-    m_options(sWorld->getIntConfig(CONFIG_LFG_OPTIONSMASK))
+    m_options(sWorld->getIntConfig(CONFIG_LFG_OPTIONSMASK)),
+    m_isSoloLFG(false)
 {
 }
 
@@ -1089,7 +1093,9 @@ void LFGMgr::MakeNewGroup(LfgProposal const& proposal)
             grp->SetLfgRoles(pguid, proposal.players.find(pguid)->second.role);
 
             // Add the cooldown spell if queued for a random dungeon
-            if (dungeon->type == LFG_TYPE_RANDOM)
+            //if (dungeon->type == LFG_TYPE_RANDOM)
+				DESERTER_CONF = sConfigMgr->GetIntDefault("LFG.Deserter", 1);
+				if (dungeon->type == LFG_TYPE_RANDOM && DESERTER_CONF) //LFG Deserter
                 player->CastSpell(player, LFG_SPELL_DUNGEON_COOLDOWN, false);
 
             for (GuidList::const_iterator itr2 = players.begin(); itr2 != players.end(); ++itr2)
@@ -1148,7 +1154,10 @@ void LFGMgr::MakeNewGroup(LfgProposal const& proposal)
         {
             uint32 rDungeonId = (*dungeons.begin());
             LFGDungeonEntry const* dungeonEntry = sLFGDungeonStore.LookupEntry(rDungeonId);
-            if (dungeonEntry && dungeonEntry->TypeID == LFG_TYPE_RANDOM)
+			//LFG Deserter
+			DESERTER_CONF = sConfigMgr->GetIntDefault("LFG.Deserter", 1);
+			if (dungeonEntry && dungeonEntry->TypeID == LFG_TYPE_RANDOM && DESERTER_CONF)
+            //if (dungeonEntry && dungeonEntry->TypeID == LFG_TYPE_RANDOM)
                 player->CastSpell(player, LFG_SPELL_DUNGEON_COOLDOWN, false);
         }
     }
@@ -1237,7 +1246,7 @@ void LFGMgr::UpdateProposal(uint32 proposalId, ObjectGuid guid, bool accept)
         if (itPlayers->second.accept != LFG_ANSWER_AGREE)   // No answer (-1) or not accepted (0)
             allAnswered = false;
 
-    if (!allAnswered)
+    if (!sLFGMgr->IsSoloLFG() && !allAnswered)
     {
         for (LfgProposalPlayerContainer::const_iterator it = proposal.players.begin(); it != proposal.players.end(); ++it)
             SendLfgUpdateProposal(it->first, proposal);
@@ -2318,6 +2327,11 @@ LfgDungeonSet LFGMgr::GetRandomAndSeasonalDungeons(uint8 level, uint8 expansion)
             randomDungeons.insert(dungeon.Entry());
     }
     return randomDungeons;
+}
+
+void LFGMgr::ToggleSoloLFG()
+{
+    m_isSoloLFG = !m_isSoloLFG;
 }
 
 } // namespace lfg

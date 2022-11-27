@@ -17,19 +17,29 @@
 
 #include "WorldSession.h"
 #include "Common.h"
+#include "Chat.h"
+#include "Config.h"
 #include "Corpse.h"
 #include "Creature.h"
 #include "GameObject.h"
+#include "GameTime.h"
 #include "Group.h"
 #include "Item.h"
 #include "Log.h"
 #include "LootItemStorage.h"
 #include "LootMgr.h"
+#include "Mail.h"
+#include "MailPackets.h"
 #include "Map.h"
 #include "Object.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
+#include <string>
+#include "StringFormat.h"
 #include "WorldPacket.h"
+#ifdef ELUNA
+#include "LuaEngine.h"
+#endif
 
 void WorldSession::HandleAutostoreLootItemOpcode(WorldPacket& recvData)
 {
@@ -38,6 +48,7 @@ void WorldSession::HandleAutostoreLootItemOpcode(WorldPacket& recvData)
     ObjectGuid lguid = player->GetLootGUID();
     Loot* loot = nullptr;
     uint8 lootSlot = 0;
+	bool Grey_Convert = sConfigMgr->GetBoolDefault("AOE.LOOT.Grey.Money", true);
 
     recvData >> lootSlot;
 
@@ -78,17 +89,191 @@ void WorldSession::HandleAutostoreLootItemOpcode(WorldPacket& recvData)
         loot = &bones->loot;
     }
     else
-    {
+	{
         Creature* creature = GetPlayer()->GetMap()->GetCreature(lguid);
-
-        bool lootAllowed = creature && creature->IsAlive() == (player->GetClass() == CLASS_ROGUE && creature->loot.loot_type == LOOT_PICKPOCKETING);
-        if (!lootAllowed || !creature->IsWithinDistInMap(_player, INTERACTION_DISTANCE))
+        if (sConfigMgr->GetBoolDefault("AOE.LOOT.enable", true) && creature && (!player->GetGroup() || (player->GetGroup() && sConfigMgr->GetBoolDefault("AOE.LOOT.enable.group", true))))
         {
-            player->SendLootError(lguid, lootAllowed ? LOOT_ERROR_TOO_FAR : LOOT_ERROR_DIDNT_KILL);
-            return;
+            int i = 0;
+            float range = 30.0f;
+			int maileditems = 0;
+			int vendeditems = 0;
+			int vendvalue = 0;
+			int vendeditemstotal = 0;
+			int maileditemstotal = 0;
+			bool openmailbox = false;
+			
+            Creature* c = nullptr;
+            std::vector<Creature*> creaturedie;
+            player->GetDeadCreatureListInGrid(creaturedie, range);
+			std::string filter = sConfigMgr->GetStringDefault("AOE.MAIL.filter", "");
+            std::vector<std::string_view> filters = Trinity::Tokenize(filter, ',', false);
+            for (std::vector<Creature*>::iterator itr = creaturedie.begin(); itr != creaturedie.end(); ++itr)
+            {
+                c = *itr;
+                loot = &c->loot;
+				uint8 maxSlot = loot->GetMaxSlotInLootFor(player);	
+				 for (i = 0; i < maxSlot; ++i)
+					{
+                    if (LootItem* item = loot->LootItemInSlot(i, player))
+						{
+						ItemTemplate const* pProto = sObjectMgr->GetItemTemplate(item->itemid);
+                        InventoryResult res = EQUIP_ERR_OK;
+						
+                        if (player->AddItem(item->itemid, item->count, &res))
+                        {
+                            player->SendNotifyLootItemRemoved(lootSlot);
+                            player->SendLootRelease(player->GetLootGUID());
+                        }
+                        else if (filter.empty() || std::find(filters.begin(), filters.end(), std::to_string(res)) == filters.end())
+                        {
+							if (pProto->Quality == ITEM_QUALITY_POOR && Grey_Convert)
+							{        
+								
+									
+								vendvalue = vendvalue + (pProto->SellPrice * item->count);
+								vendeditems = vendeditems + item->count;
+								
+							}
+							else
+							{
+								player->SendItemRetrievalMail(item->itemid, item->count);
+								maileditems = maileditems + item->count;
+								player->SendNewMail();
+								
+								if (pProto->Class == 12 || pProto->Class == 1) 
+								{
+										openmailbox = true;
+								}
+							
+							}
+
+						}
+						
+						
+							
+						}
+
+				}
+				
+				vendeditemstotal = vendeditems;
+				maileditemstotal = maileditems;
+				 // This if covers a issue with skinning being infinite by Aokromes
+                if (!creature->IsAlive())
+					{
+                    creature->AllLootRemovedFromCorpse();
+					}
+	
+                loot->clear();
+	
+                if (loot->isLooted() && loot->empty())
+					{
+                    c->RemoveFlag(UNIT_DYNAMIC_FLAGS, UNIT_DYNFLAG_LOOTABLE);
+                    c->AllLootRemovedFromCorpse();
+					}
+
+		}
+		
+		
+		if (maileditemstotal >= 1) 
+		{
+			std::string maileditems_Text = std::to_string(maileditemstotal) + " item(s) mailed to you.";
+			const char * mit = maileditems_Text.c_str();
+			player->GetSession()->SendAreaTriggerMessage("%s", mit);
+		}
+				
+		if (vendeditemstotal >= 1)
+		{
+		std::string Vend_Value_Text = "Converted " + std::to_string(vendeditemstotal) + " grey item(s) to ";
+		std::string Vend_Value_Text_Full;
+		std::string Vend_ValueGold;
+		std::string Vend_ValueSilver;
+		std::string Vend_ValueCopper;
+		int totalvendvalue = vendvalue;
+				
+		int number = 0;
+		int gold = 0;
+		int silver = 0;
+		int copper = 0;
+		
+			if (totalvendvalue >= 10000)
+				{
+					
+					number = totalvendvalue;
+					gold = number/10000;
+					number = number%10000;
+					silver = number/100;
+					copper = number%100;
+					
+					Vend_ValueGold = std::to_string(gold) + "g";
+					Vend_ValueSilver = std::to_string(silver) + "s";
+					Vend_ValueCopper = std::to_string(copper) + "c";
+					
+					
+					Vend_Value_Text_Full = Vend_Value_Text + Vend_ValueGold + Vend_ValueSilver + Vend_ValueCopper;
+					
+				}
+			if (totalvendvalue >= 100 && totalvendvalue < 10000)
+				{
+
+					number = totalvendvalue;
+					gold = 0;
+					silver = number/100;
+					copper = number%100;
+					
+					Vend_ValueGold = std::to_string(gold) + "g";
+					Vend_ValueSilver = std::to_string(silver) + "s";
+					Vend_ValueCopper = std::to_string(copper) + "c";
+					
+					
+					Vend_Value_Text_Full = Vend_Value_Text + Vend_ValueSilver + Vend_ValueCopper;
+
+				}
+			if	(totalvendvalue > 0 && totalvendvalue < 100)
+				{
+
+					
+					gold = 0;
+					silver = 0;
+					copper = totalvendvalue;
+					
+					Vend_ValueGold = std::to_string(gold) + "g";
+					Vend_ValueSilver = std::to_string(silver) + "s";
+					Vend_ValueCopper = std::to_string(copper) + "c";
+					
+					
+					Vend_Value_Text_Full = Vend_Value_Text + Vend_ValueCopper;
+
+				}
+			
+			
+			const char * cft = Vend_Value_Text_Full.c_str();
+			player->GetSession()->SendAreaTriggerMessage("%s", cft);
+			player->ModifyMoney(totalvendvalue);
+		}
+		
+		if (openmailbox)
+		{
+			 //player->CastSpell(player, 30524, true);
+			 player->SendNewMail();
+			 player->GetSession()->SendShowMailBox(player->GetGUID());
+			player->SendNewMail();
+		}
+		
+		
+	}
+        else
+        {
+            //bool lootAllowed = creature && creature->IsAlive() == (player->GetClass() == CLASS_ROGUE && creature->loot.loot_type == LOOT_PICKPOCKETING);
+			bool lootAllowed = creature && creature->IsAlive() == (creature->loot.loot_type == LOOT_PICKPOCKETING);
+            if (!lootAllowed || !creature->IsWithinDistInMap(_player, INTERACTION_DISTANCE))
+            {
+                player->SendLootError(lguid, lootAllowed ? LOOT_ERROR_TOO_FAR : LOOT_ERROR_DIDNT_KILL);
+                return;
+            }
+
+            loot = &creature->loot;
         }
 
-        loot = &creature->loot;
     }
 
     player->StoreLootItem(lootSlot, loot);
@@ -147,7 +332,8 @@ void WorldSession::HandleLootMoneyOpcode(WorldPacket& /*recvData*/)
         case HighGuid::Vehicle:
         {
             Creature* creature = player->GetMap()->GetCreature(guid);
-            bool lootAllowed = creature && creature->IsAlive() == (player->GetClass() == CLASS_ROGUE && creature->loot.loot_type == LOOT_PICKPOCKETING);
+            //bool lootAllowed = creature && creature->IsAlive() == (player->GetClass() == CLASS_ROGUE && creature->loot.loot_type == LOOT_PICKPOCKETING);
+			bool lootAllowed = creature && creature->IsAlive() == (creature->loot.loot_type == LOOT_PICKPOCKETING);
             if (lootAllowed && creature->IsWithinDistInMap(player, INTERACTION_DISTANCE))
             {
                 loot = &creature->loot;
@@ -195,6 +381,27 @@ void WorldSession::HandleLootMoneyOpcode(WorldPacket& /*recvData*/)
         }
         else
         {
+            ObjectGuid lguid = player->GetLootGUID();
+            Creature* creature = GetPlayer()->GetMap()->GetCreature(lguid);
+            if (creature && sConfigMgr->GetBoolDefault("AOE.LOOT.enable", true))
+            {
+                if (!player->GetGroup() || (player->GetGroup() && sConfigMgr->GetBoolDefault("AOE.LOOT.enable.group", true)))
+                {
+                    float range = 30.0f;
+                    uint32 gold = 0;
+                    Creature* c = nullptr;
+                    std::vector<Creature*> creaturedie;
+                    player->GetDeadCreatureListInGrid(creaturedie, range);
+                    for (std::vector<Creature*>::iterator itr = creaturedie.begin(); itr != creaturedie.end(); ++itr)
+                    {
+                        c = *itr;
+                        loot = &c->loot;
+                        gold += loot->gold;
+                        loot->gold = 0;
+                    }
+                    loot->gold = gold;
+                }
+            }
             player->ModifyMoney(loot->gold);
             player->UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_LOOT_MONEY, loot->gold);
 
@@ -204,6 +411,9 @@ void WorldSession::HandleLootMoneyOpcode(WorldPacket& /*recvData*/)
             SendPacket(&data);
         }
 
+#ifdef ELUNA
+        sEluna->OnLootMoney(player, loot->gold);
+#endif
         loot->gold = 0;
 
         // Delete the money loot record from the DB
@@ -351,7 +561,8 @@ void WorldSession::DoLootRelease(ObjectGuid lguid)
     {
         Creature* creature = GetPlayer()->GetMap()->GetCreature(lguid);
 
-        bool lootAllowed = creature && creature->IsAlive() == (player->GetClass() == CLASS_ROGUE && creature->loot.loot_type == LOOT_PICKPOCKETING);
+        //bool lootAllowed = creature && creature->IsAlive() == (player->GetClass() == CLASS_ROGUE && creature->loot.loot_type == LOOT_PICKPOCKETING);
+		bool lootAllowed = creature && creature->IsAlive() == (creature->loot.loot_type == LOOT_PICKPOCKETING);
         if (!lootAllowed || !creature->IsWithinDistInMap(_player, INTERACTION_DISTANCE))
             return;
 
@@ -477,6 +688,9 @@ void WorldSession::HandleLootMasterGiveOpcode(WorldPacket& recvData)
     target->UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_LOOT_TYPE, loot->loot_type, item.count);
     target->UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_LOOT_EPIC_ITEM, item.itemid, item.count);
 
+#ifdef ELUNA
+    sEluna->OnLootItem(target, newitem, item.count, lootguid);
+#endif
     // mark as looted
     item.count = 0;
     item.is_looted = true;

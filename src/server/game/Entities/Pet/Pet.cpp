@@ -17,6 +17,7 @@
 
 #include "Pet.h"
 #include "Common.h"
+#include "Config.h"
 #include "DatabaseEnv.h"
 #include "Formulas.h"
 #include "Group.h"
@@ -34,6 +35,7 @@
 #include "SpellPackets.h"
 #include "Unit.h"
 #include "Util.h"
+#include "World.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
 #include "ZoneScript.h"
@@ -706,6 +708,28 @@ void Pet::Update(uint32 diff)
         default:
             break;
     }
+	
+		if (sConfigMgr->GetBoolDefault("DungeonStatsReward.Pets", true))
+	{
+		QueryResult Dungeonstatsresult = CharacterDatabase.PQuery("SELECT `Strength`, `Agility`, `Stamina`, `Intellect`, `Spirit`, `SpellPower`, `AttackPower`, `RAttackPower` FROM `stats_from_dungeons` WHERE `GUID` = %u", GetOwner()->GetGUID());
+		//skulystats
+		
+		if (Dungeonstatsresult)
+		{
+
+		SetStatFlatModifier(UnitMods(STAT_STRENGTH), TOTAL_VALUE, (*Dungeonstatsresult)[0].GetUInt32());
+		SetStatFlatModifier(UnitMods(STAT_AGILITY), TOTAL_VALUE, (*Dungeonstatsresult)[1].GetUInt32());
+		SetStatFlatModifier(UnitMods(STAT_STAMINA), TOTAL_VALUE, (*Dungeonstatsresult)[2].GetUInt32());
+		SetStatFlatModifier(UnitMods(STAT_INTELLECT), TOTAL_VALUE, (*Dungeonstatsresult)[3].GetUInt32());
+		SetStatFlatModifier(UnitMods(STAT_SPIRIT), TOTAL_VALUE, (*Dungeonstatsresult)[4].GetUInt32());
+		SetBonusDamage((*Dungeonstatsresult)[5].GetUInt32());
+		SetStatFlatModifier(UnitMods(UNIT_MOD_ATTACK_POWER), TOTAL_VALUE, (*Dungeonstatsresult)[6].GetUInt32());
+		SetStatFlatModifier(UnitMods(UNIT_MOD_ATTACK_POWER_RANGED), TOTAL_VALUE, (*Dungeonstatsresult)[7].GetUInt32());
+		}
+		
+	}
+	
+	
     Creature::Update(diff);
 }
 
@@ -889,6 +913,7 @@ bool Guardian::InitStatsForLevel(uint8 petlevel)
                            GetEntry(), GetOwner()->GetClass());
         }
     }
+    	
 
     uint32 creature_ID = (petType == HUNTER_PET) ? 1 : cinfo->Entry;
 
@@ -1799,7 +1824,7 @@ uint8 Pet::GetMaxTalentPointsForLevel(uint8 level) const
     uint8 points = (level >= 20) ? ((level - 16) / 4) : 0;
     // Mod points from owner SPELL_AURA_MOD_PET_TALENT_POINTS
     points += GetOwner()->GetTotalAuraModifier(SPELL_AURA_MOD_PET_TALENT_POINTS);
-    return points;
+    return points * sWorld->getRate(RATE_TALENT_PET);
 }
 
 void Pet::ToggleAutocast(SpellInfo const* spellInfo, bool apply)
