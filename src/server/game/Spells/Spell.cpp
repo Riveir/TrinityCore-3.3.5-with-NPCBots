@@ -7799,6 +7799,10 @@ void Spell::DoEffectOnLaunchTarget(TargetInfo& targetInfo, float multiplier, Spe
     if (!unit)
         return;
 
+    // This will only cause combat - the target will engage once the projectile hits (in DoAllEffectOnTarget)
+    if (m_originalCaster && targetInfo.MissCondition != SPELL_MISS_EVADE && !m_originalCaster->IsFriendlyTo(unit) && (!m_spellInfo->IsPositive() || m_spellInfo->HasEffect(SPELL_EFFECT_DISPEL)) && (m_spellInfo->HasInitialAggro() || unit->IsEngaged()))
+        m_originalCaster->SetInCombatWith(unit);
+
     m_damage = 0;
     m_healing = 0;
 
@@ -7830,6 +7834,16 @@ void Spell::DoEffectOnLaunchTarget(TargetInfo& targetInfo, float multiplier, Spe
 
     targetInfo.Damage += m_damage;
     targetInfo.Healing += m_healing;
+
+    float critChance = m_spellValue->CriticalChance;
+    if (m_originalCaster)
+    {
+        if (!critChance)
+            critChance = m_originalCaster->SpellCritChanceDone(m_spellInfo, m_spellSchoolMask, m_attackType);
+        critChance = unit->SpellCritChanceTaken(m_originalCaster, m_spellInfo, m_spellSchoolMask, critChance, m_attackType);
+    }
+
+    targetInfo.IsCrit = roll_chance_f(critChance);
 }
 
 SpellCastResult Spell::CanOpenLock(SpellEffectInfo const& spellEffectInfo, uint32 lockId, SkillType& skillId, int32& reqSkillValue, int32& skillValue)

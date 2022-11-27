@@ -1,0 +1,10 @@
+ALTER TABLE item_template MODIFY stat_value1 INT(11) NOT NULL;
+ALTER TABLE item_template MODIFY stat_value2 INT(11) NOT NULL;
+ALTER TABLE item_template MODIFY stat_value3 INT(11) NOT NULL;
+ALTER TABLE item_template MODIFY stat_value4 INT(11) NOT NULL;
+ALTER TABLE item_template MODIFY stat_value5 INT(11) NOT NULL;
+ALTER TABLE item_template MODIFY stat_value6 INT(11) NOT NULL;
+ALTER TABLE item_template MODIFY stat_value7 INT(11) NOT NULL;
+ALTER TABLE item_template MODIFY stat_value8 INT(11) NOT NULL;
+ALTER TABLE item_template MODIFY stat_value9 INT(11) NOT NULL;
+ALTER TABLE item_template MODIFY stat_value10 INT(11) NOT NULL;

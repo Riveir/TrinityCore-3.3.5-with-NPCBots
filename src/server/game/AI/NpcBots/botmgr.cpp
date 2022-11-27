@@ -62,6 +62,11 @@ bool _displayEquipment;
 bool _showCloak;
 bool _showHelm;
 bool _sendEquipListItems;
+bool _transmog_enable;
+bool _transmog_mixArmorClasses;
+bool _transmog_mixWeaponClasses;
+bool _transmog_mixWeaponInvTypes;
+bool _transmog_useEquipmentSlots;
 bool _enableclass_blademaster;
 bool _enableclass_sphynx;
 bool _enableclass_archmage;
@@ -79,6 +84,7 @@ float _botStatLimits_crit;
 float _mult_dmg_physical;
 float _mult_dmg_spell;
 float _mult_healing;
+float _mult_hp;
 
 bool __firstload = true;
 
@@ -210,6 +216,7 @@ void BotMgr::LoadConfig(bool reload)
     _mult_dmg_physical              = sConfigMgr->GetFloatDefault("NpcBot.Mult.Damage.Physical", 1.0f);
     _mult_dmg_spell                 = sConfigMgr->GetFloatDefault("NpcBot.Mult.Damage.Spell", 1.0f);
     _mult_healing                   = sConfigMgr->GetFloatDefault("NpcBot.Mult.Healing", 1.0f);
+    _mult_hp                        = sConfigMgr->GetFloatDefault("NpcBot.Mult.HP", 1.0f);
     _enableNpcBotsDungeons          = sConfigMgr->GetBoolDefault("NpcBot.Enable.Dungeon", true);
     _enableNpcBotsRaids             = sConfigMgr->GetBoolDefault("NpcBot.Enable.Raid", false);
     _enableNpcBotsBGs               = sConfigMgr->GetBoolDefault("NpcBot.Enable.BG", false);
@@ -229,6 +236,11 @@ void BotMgr::LoadConfig(bool reload)
     _showCloak                      = sConfigMgr->GetBoolDefault("NpcBot.EquipmentDisplay.ShowCloak", true);
     _showHelm                       = sConfigMgr->GetBoolDefault("NpcBot.EquipmentDisplay.ShowHelm", false);
     _sendEquipListItems             = sConfigMgr->GetBoolDefault("NpcBot.Gossip.ShowEquipmentListItems", false);
+    _transmog_enable                = sConfigMgr->GetBoolDefault("NpcBot.Transmog.Enable", false);
+    _transmog_mixArmorClasses       = sConfigMgr->GetBoolDefault("NpcBot.Transmog.MixArmorClasses", false);
+    _transmog_mixWeaponClasses      = sConfigMgr->GetBoolDefault("NpcBot.Transmog.MixWeaponClasses", false);
+    _transmog_mixWeaponInvTypes     = sConfigMgr->GetBoolDefault("NpcBot.Transmog.MixWeaponInventoryTypes", false);
+    _transmog_useEquipmentSlots     = sConfigMgr->GetBoolDefault("NpcBot.Transmog.UseEquipmentSlots", false);
     _enableclass_blademaster        = sConfigMgr->GetBoolDefault("NpcBot.NewClasses.Blademaster.Enable", true);
     _enableclass_sphynx             = sConfigMgr->GetBoolDefault("NpcBot.NewClasses.ObsidianDestroyer.Enable", true);
     _enableclass_archmage           = sConfigMgr->GetBoolDefault("NpcBot.NewClasses.Archmage.Enable", true);
@@ -245,12 +257,10 @@ void BotMgr::LoadConfig(bool reload)
     _botStatLimits_crit             = sConfigMgr->GetFloatDefault("NpcBot.Stats.Limits.Crit", 95.0f);
 
     //limits
-    _mult_dmg_physical              = std::max<float>(_mult_dmg_physical, 0.1f);
-    _mult_dmg_spell                 = std::max<float>(_mult_dmg_spell, 0.1f);
-    _mult_healing                   = std::max<float>(_mult_healing,   0.1f);
-    _mult_dmg_physical              = std::min<float>(_mult_dmg_physical, 10.f);
-    _mult_dmg_spell                 = std::min<float>(_mult_dmg_spell, 10.f);
-    _mult_healing                   = std::min<float>(_mult_healing,   10.f);
+    RoundToInterval(_mult_dmg_physical, 0.1f, 10.f);
+    RoundToInterval(_mult_dmg_spell, 0.1f, 10.f);
+    RoundToInterval(_mult_healing, 0.1f, 10.f);
+    RoundToInterval(_mult_hp, 0.1f, 10.f);
 
     //exclusions
     uint8 dpsFlags = /*_tankingTargetIconFlags | _offTankingTargetIconFlags | */_dpsTargetIconFlags | _rangedDpsTargetIconFlags;
@@ -362,6 +372,27 @@ bool BotMgr::ShowEquippedHelm()
 bool BotMgr::SendEquipListItems()
 {
     return _sendEquipListItems;
+}
+
+bool BotMgr::IsTransmogEnabled()
+{
+    return _transmog_enable;
+}
+bool BotMgr::MixArmorClasses()
+{
+    return _transmog_mixArmorClasses;
+}
+bool BotMgr::MixWeaponClasses()
+{
+    return _transmog_mixWeaponClasses;
+}
+bool BotMgr::MixWeaponInventoryTypes()
+{
+    return _transmog_mixWeaponInvTypes;
+}
+bool BotMgr::TransmogUseEquipmentSlots()
+{
+    return _transmog_useEquipmentSlots;
 }
 
 bool BotMgr::IsClassEnabled(uint8 m_class)
@@ -948,6 +979,7 @@ void BotMgr::RemoveBot(ObjectGuid guid, uint8 removetype)
 
     if (removetype == BOT_REMOVE_DISMISS)
     {
+        BotDataMgr::ResetNpcBotTransmogData(bot->GetEntry(), false);
         uint32 newOwner = 0;
         BotDataMgr::UpdateNpcBotData(bot->GetEntry(), NPCBOT_UPDATE_OWNER, &newOwner);
     }
@@ -1639,4 +1671,8 @@ float BotMgr::GetBotDamageModSpell()
 float BotMgr::GetBotHealingMod()
 {
     return _mult_healing;
+}
+float BotMgr::GetBotHPMod()
+{
+    return _mult_hp;
 }
