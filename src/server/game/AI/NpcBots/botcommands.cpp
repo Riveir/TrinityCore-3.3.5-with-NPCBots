@@ -148,6 +148,7 @@ public:
             { "recall",     npcbotRecallCommandTable                                                                                },
             { "kill",       HandleNpcBotKillCommand,                rbac::RBAC_PERM_COMMAND_NPCBOT_KILL,               Console::No  },
             { "suicide",    HandleNpcBotKillCommand,                rbac::RBAC_PERM_COMMAND_NPCBOT_KILL,               Console::No  },
+            { "sendto",     HandleNpcBotSendToCommand,              rbac::RBAC_PERM_COMMAND_NPCBOT_SEND,               Console::No  },
             { "distance",   npcbotDistanceCommandTable                                                                              },
             { "order",      npcbotOrderCommandTable                                                                                 },
             { "vehicle",    npcbotVehicleCommandTable                                                                               },
@@ -159,6 +160,43 @@ public:
             { "npcbot",     npcbotCommandTable                                                                                      },
         };
         return commandTable;
+    }
+
+    static bool HandleNpcBotSendToCommand(ChatHandler* handler, Optional<std::string_view> name)
+    {
+        Player const* owner = handler->GetSession()->GetPlayer();
+        Unit const* target = handler->getSelectedCreature();
+
+        auto return_syntax = [chandler = handler]() -> bool {
+            chandler->SendSysMessage("Syntax: .npcbot sendto");
+            chandler->SendSysMessage("Makes selected bot wait 30 sec for your next DEST spell, assume that position and hold it");
+            chandler->SendSysMessage("Select self to move ALL bots");
+            chandler->SendSysMessage("Max distance is 70 yds");
+            chandler->SetSentErrorMessage(true);
+            return false;
+        };
+
+        auto return_success = [chandler = handler]() -> bool {
+            chandler->SendSysMessage("Your next dest spell will send bot(s) to position...");
+            return true;
+        };
+
+        if (!owner->HaveBot() || (!(target && target->ToCreature() && target->ToCreature()->IsNPCBot()) && !name))
+        {
+            if (owner->HaveBot() && (!target || target->GetGUID() == owner->GetGUID()))
+            {
+                owner->GetBotMgr()->SendBotAwaitState(BOT_AWAIT_SEND);
+                return return_success();
+            }
+            return return_syntax();
+        }
+
+        Creature const* bot = (target && target->ToCreature()) ? owner->GetBotMgr()->GetBot(target->GetGUID()) : owner->GetBotMgr()->GetBotByName(*name);
+        if (!bot || !bot->IsAlive())
+            return return_syntax();
+
+        bot->GetBotAI()->SetBotAwaitState(BOT_AWAIT_SEND);
+        return return_success();
     }
 
     static bool HandleNpcBotDebugNamesCommand(ChatHandler* handler, Optional<std::string_view> name)
@@ -1064,7 +1102,7 @@ public:
         for (CreatureTemplateContainer::const_iterator itr = ctc.begin(); itr != ctc.end(); ++itr)
         {
             uint32 id = itr->second.Entry;
-            if (id < BOT_ENTRY_BEGIN || id > BOT_ENTRY_END)
+            if (!BotDataMgr::SelectNpcBotExtras(id))
                 continue;
 
             if (id == BOT_ENTRY_MIRROR_IMAGE_BM)
@@ -1394,21 +1432,16 @@ public:
         }
 
         uint32 newentry = 0;
-        QueryResult creres = WorldDatabase.PQuery("SELECT MAX(entry) FROM creature_template WHERE entry >= %u AND entry < %u", BOT_ENTRY_CREATE_BEGIN, BOT_ENTRY_END);
-        if (creres)
+        QueryResult creres = WorldDatabase.PQuery("SELECT entry FROM creature_template WHERE entry = %u", BOT_ENTRY_CREATE_BEGIN);
+        if (!creres)
+            newentry = BOT_ENTRY_CREATE_BEGIN;
+        else
         {
+            creres = WorldDatabase.PQuery("SELECT MIN(entry) FROM creature_template WHERE entry >= %u AND entry IN (SELECT entry FROM creature_template) AND entry+1 NOT IN (SELECT entry FROM creature_template)", BOT_ENTRY_CREATE_BEGIN);
+            ASSERT(creres);
             Field* field = creres->Fetch();
             newentry = field[0].GetUInt32() + 1;
         }
-        if (newentry < BOT_ENTRY_CREATE_BEGIN)
-            newentry = BOT_ENTRY_CREATE_BEGIN;
-
-        if (newentry >= BOT_ENTRY_END)
-        {
-            handler->SendSysMessage("Error: last entry is occupied, assuming no free entries left!");
-            handler->SetSentErrorMessage(true);
-            return false;
-        };
 
         WorldDatabaseTransaction trans = WorldDatabase.BeginTransaction();
         trans->Append("DROP TEMPORARY TABLE IF EXISTS creature_template_temp_npcbot_create");
