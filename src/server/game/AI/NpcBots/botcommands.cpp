@@ -44,9 +44,9 @@ private:
     // model ids with different sound sets tied to them
     enum SoundSetModels : uint32
     {
-        SOUNDSETMODEL_HUMAN_MALE_1          = 3192,
+        SOUNDSETMODEL_HUMAN_MALE_1          = 1492,
         SOUNDSETMODEL_HUMAN_MALE_2          = 1290,
-        SOUNDSETMODEL_HUMAN_MALE_3          = 793,
+        SOUNDSETMODEL_HUMAN_MALE_3          = 1699,
         SOUNDSETMODEL_HUMAN_FEMALE_1        = 1295,
         SOUNDSETMODEL_HUMAN_FEMALE_2        = 1296,
         SOUNDSETMODEL_HUMAN_FEMALE_3        = 1297,
@@ -57,10 +57,10 @@ private:
         SOUNDSETMODEL_DWARF_FEMALE_2        = 1407,
         SOUNDSETMODEL_DWARF_FEMALE_3        = 2585,
         SOUNDSETMODEL_NIGHTELF_MALE_1       = 1285,
-        SOUNDSETMODEL_NIGHTELF_MALE_2       = 3599,
-        SOUNDSETMODEL_NIGHTELF_MALE_3       = 3602,
-        SOUNDSETMODEL_NIGHTELF_FEMALE_1     = 2151,
-        SOUNDSETMODEL_NIGHTELF_FEMALE_2     = 2081,
+        SOUNDSETMODEL_NIGHTELF_MALE_2       = 1704,
+        SOUNDSETMODEL_NIGHTELF_MALE_3       = 1706,
+        SOUNDSETMODEL_NIGHTELF_FEMALE_1     = 1681,
+        SOUNDSETMODEL_NIGHTELF_FEMALE_2     = 1682,
         SOUNDSETMODEL_NIGHTELF_FEMALE_3     = 1719,
         SOUNDSETMODEL_GNOME_MALE_1          = 1832,
         SOUNDSETMODEL_GNOME_MALE_2          = 4287,
@@ -68,9 +68,9 @@ private:
         SOUNDSETMODEL_GNOME_FEMALE_1        = 3124,
         SOUNDSETMODEL_GNOME_FEMALE_2        = 5378,
         SOUNDSETMODEL_GNOME_FEMALE_3        = 3108,
-        SOUNDSETMODEL_DRAENEI_MALE_1        = 16503,
-        SOUNDSETMODEL_DRAENEI_MALE_2        = 16477,
-        SOUNDSETMODEL_DRAENEI_MALE_3        = 16475,
+        SOUNDSETMODEL_DRAENEI_MALE_1        = 16226,
+        SOUNDSETMODEL_DRAENEI_MALE_2        = 16589,
+        SOUNDSETMODEL_DRAENEI_MALE_3        = 16224,
         SOUNDSETMODEL_DRAENEI_FEMALE_1      = 16222,
         SOUNDSETMODEL_DRAENEI_FEMALE_2      = 16202,
         SOUNDSETMODEL_DRAENEI_FEMALE_3      = 16636,
@@ -1738,10 +1738,10 @@ public:
             trans->PAppend("UPDATE creature_template_temp_npcbot_create SET modelid1 = %u", modelId);
         trans->Append("INSERT INTO creature_template SELECT * FROM creature_template_temp_npcbot_create");
         trans->Append("DROP TEMPORARY TABLE creature_template_temp_npcbot_create");
-        trans->PAppend("INSERT INTO creature_template_npcbot_extras VALUES (%u, %u, %u)", newentry, uint32(*bclass), uint32(*race));
-        trans->PAppend("INSERT INTO creature_equip_template SELECT %u, 1, ids.itemID1, ids.itemID2, ids.itemID3, -1 FROM (SELECT itemID1, itemID2, itemID3 FROM creature_equip_template WHERE CreatureID = (SELECT entry FROM creature_template_npcbot_extras WHERE class = %u LIMIT 1)) ids", newentry, uint32(*bclass));
+        trans->PAppend("REPLACE INTO creature_template_npcbot_extras VALUES (%u, %u, %u)", newentry, uint32(*bclass), uint32(*race));
+        trans->PAppend("REPLACE INTO creature_equip_template SELECT %u, 1, ids.itemID1, ids.itemID2, ids.itemID3, -1 FROM (SELECT itemID1, itemID2, itemID3 FROM creature_equip_template WHERE CreatureID = (SELECT entry FROM creature_template_npcbot_extras WHERE class = %u LIMIT 1)) ids", newentry, uint32(*bclass));
         if (can_change_appearance)
-            trans->PAppend("INSERT INTO creature_template_npcbot_appearance VALUES (%u, \"%s\", %u, %u, %u, %u, %u, %u)",
+            trans->PAppend("REPLACE INTO creature_template_npcbot_appearance VALUES (%u, \"%s\", %u, %u, %u, %u, %u, %u)",
                 newentry, namestr.c_str(), uint32(*gender), uint32(*skin), uint32(*face), uint32(*hairstyle), uint32(*haircolor), uint32(*features));
         WorldDatabase.DirectCommitTransaction(trans);
 
@@ -1835,6 +1835,7 @@ public:
         NpcBotExtras const* _botExtras = BotDataMgr::SelectNpcBotExtras(id);
         if (!_botExtras)
         {
+            delete creature;
             handler->PSendSysMessage("No class/race data found for bot %u!", id);
             handler->SetSentErrorMessage(true);
             return false;
@@ -1847,9 +1848,9 @@ public:
         uint32 db_guid = creature->GetSpawnId();
         if (!creature->LoadBotCreatureFromDB(db_guid, map))
         {
+            delete creature;
             handler->SendSysMessage("Cannot load npcbot from DB!");
             handler->SetSentErrorMessage(true);
-            delete creature;
             return false;
         }
 
