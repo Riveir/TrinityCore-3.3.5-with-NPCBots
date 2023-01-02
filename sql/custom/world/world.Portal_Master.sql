@@ -9,7 +9,7 @@ SET
 @ENTRY          := 190000,
 @NAME           := "Portal Master",
 @SUBNAME        := "",
-@MODEL          := 21572,
+@MODEL          := 28213,
 
 @AURA           := "30540", -- "35766" = casting
 
@@ -28,16 +28,13 @@ DELETE FROM gossip_menu_option WHERE menuid BETWEEN @GOSSIP_MENU AND @GOSSIP_MEN
 DELETE FROM smart_scripts WHERE entryorguid = @ENTRY AND source_type = 0;
 DELETE FROM conditions WHERE (SourceTypeOrReferenceId = 15 OR SourceTypeOrReferenceId = 14) AND SourceGroup BETWEEN @GOSSIP_MENU AND @GOSSIP_MENU+8;
 DELETE from creature WHERE ID = @ENTRY;
-DELETE from gameobject WHERE ID = @RUNE AND guid >= 200000;
+
 
 -- Teleporter
 
 INSERT INTO creature_template (entry, modelid1, `name`, subname, IconName, gossip_menu_id, minlevel, maxlevel, faction, npcflag, speed_walk, speed_run, scale, `rank`, unit_class, unit_flags, `type`, type_flags, RegenHealth, flags_extra, AiName) VALUES
 (@ENTRY, @MODEL, @NAME, @SUBNAME, "Directions", @GOSSIP_MENU, 71, 71, 35, 3, 1, 1.14286, 1.25, 1, 1, 0, 7, 138936390, 1, 2, "SmartAI");
 
--- Teleporter aura
-
-INSERT INTO creature_template_addon (entry, mount, bytes1, bytes2, emote, path_id, auras) VALUES (@ENTRY, 0, 0, 0, 0, 0, @AURA);
 
 -- Gossip header text link to menus
 
@@ -523,7 +520,7 @@ INSERT INTO creature (id, map, spawnMask, phaseMask, modelid, position_x, positi
 (@ENTRY, 0, 1, 1, 0, -13180.5, 342.503, 43.1936, 4.32977, 25, 0, 13700, 6540), 
 (@ENTRY, 530, 1, 1, 0, -3862.69, -11645.8, -137.629, 2.38273, 25, 0, 13700, 6540), 
 (@ENTRY, 0, 1, 1, 0, -4898.37, -965.118, 501.447, 2.25986, 25, 0, 13700, 6540), 
-(@ENTRY, 0, 1, 1, 0, -8845.09, 624.828, 94.2999, 0.44062, 25, 0, 13700, 6540), 
+(@ENTRY, 0, 1, 1, 0, -8983.66, 853.948, 29.6207, 3.00329, 25, 0, 13700, 6540), 
 (@ENTRY, 1, 1, 1, 0, 1599.25, -4375.85, 10.0872, 5.23641, 25, 0, 13700, 6540), 
 (@ENTRY, 1, 1, 1, 0, -1277.65, 72.9751, 128.742, 5.95567, 25, 0, 13700, 6540), 
 (@ENTRY, 0, 1, 1, 0, 1637.21, 240.132, -43.1034, 3.13147, 25, 0, 13700, 6540), 
@@ -533,22 +530,6 @@ INSERT INTO creature (id, map, spawnMask, phaseMask, modelid, position_x, positi
 (@ENTRY, 0, 1, 1, 0, -14279.8, 555.014, 8.90011, 3.97606, 25, 0, 13700, 6540), 
 (@ENTRY, 530, 1, 1, 0, -1888.65, 5355.88, -12.4279, 1.25883, 25, 0, 13700, 6540);
 
--- Rune spawns:
-
-ALTER TABLE gameobject AUTO_INCREMENT = 200000;
-INSERT INTO gameobject (id, map, spawnMask, phaseMask, position_x, position_y, position_z, orientation, rotation2, rotation3, spawntimesecs, state) VALUES
-(@RUNE, 1, 1, 1, 1601.08, -4378.69, 9.9846, 2.14362, 0.878068, 0.478536, 25, 1), 
-(@RUNE, 0, 1, 1, -14281.9, 552.564, 8.90382, 0.860144, 0.416936, 0.908936, 25, 1), 
-(@RUNE, 0, 1, 1, -8842.09, 626.358, 94.0868, 3.61363, 0.972276, -0.233836, 25, 1), 
-(@RUNE, 0, 1, 1, -4900.47, -962.585, 501.455, 5.40538, 0.424947, -0.905218, 25, 1), 
-(@RUNE, 1, 1, 1, 9869.91, 2493.58, 1315.88, 5.9462, 0.167696, -0.985839, 25, 1), 
-(@RUNE, 530, 1, 1, -3864.92, -11643.7, -137.644, 2.38273, 0.928875, 0.370392, 25, 1), 
-(@RUNE, 530, 1, 1, -1887.62, 5359.09, -12.4279, 4.40435, 0.758205, 0.652017, 25, 1), 
-(@RUNE, 571, 1, 1, 5809.55, 503.975, 657.526, 5.54461, 0.360952, -0.932584, 25, 1), 
-(@RUNE, 530, 1, 1, 9738.28, -7454.19, 13.5605, 3.14231, 1, -0.000358625, 25, 1), 
-(@RUNE, 0, 1, 1, 1633.75, 240.167, -43.1034, 3.13147, 0.999987, 0.00506132, 25, 1), 
-(@RUNE, 0, 1, 1, -13181.8, 339.356, 42.9805, 1.18013, 0.556415, 0.830904, 25, 1), 
-(@RUNE, 1, 1, 1, -1274.45, 71.8601, 128.159, 2.80623, 0.985974, 0.166898, 25, 1);
 
 /*
 TrinityCore Portal Master
