@@ -43,7 +43,7 @@ class bot_ai : public CreatureAI
 
         bool canUpdate;
 
-        void InitializeAI() override { Reset(); }
+        void InitializeAI() override;
         //void Reset() override { }
 
         void JustDied(Unit*) override;
@@ -639,6 +639,8 @@ class bot_ai : public CreatureAI
         bool _evadeMode;
         bool _atHome;
         bool _wanderer;
+
+        uint8 _baseLevel;
 
         float _energyFraction;
 
