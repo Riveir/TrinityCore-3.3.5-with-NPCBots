@@ -2185,6 +2185,11 @@ void Creature::setDeathState(DeathState s)
 
 void Creature::Respawn(bool force)
 {
+    //npcbot
+    if (IsNPCBot())
+        return;
+    //end npcbot
+
     if (force)
     {
         if (IsAlive())
