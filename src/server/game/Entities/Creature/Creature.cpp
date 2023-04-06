@@ -383,6 +383,11 @@ bool Creature::IsFormationLeaderMoveAllowed() const
 
 void Creature::RemoveCorpse(bool setSpawnTime, bool destroyForNearbyPlayers)
 {
+    //npcbot
+    if (IsNPCBotOrPet())
+        return;
+    //end npcbot
+
     if (getDeathState() != CORPSE)
         return;
 
@@ -778,16 +783,6 @@ void Creature::Update(uint32 diff)
             if (IsEngaged())
                 Unit::AIUpdateTick(diff);
 
-            //npcbot: update dead bots
-            if (bot_AI)
-            {
-                bot_AI->UpdateDeadAI(diff);
-                break;
-            }
-            else if (bot_pet_AI)
-                break;
-            //end npcbot
-
             if (m_groupLootTimer && lootingGroupLowGUID)
             {
                 if (m_groupLootTimer <= diff)
@@ -800,6 +795,15 @@ void Creature::Update(uint32 diff)
                 }
                 else m_groupLootTimer -= diff;
             }
+            //npcbot: update dead bots
+            else if (bot_AI)
+            {
+                bot_AI->UpdateDeadAI(diff);
+                break;
+            }
+            else if (bot_pet_AI)
+                break;
+            //end npcbot
             else if (m_corpseRemoveTime <= GameTime::GetGameTime())
             {
                 //npcbot: do not remove corpse
@@ -869,11 +873,6 @@ void Creature::Update(uint32 diff)
 
                     m_combatPulseTime = m_combatPulseDelay * IN_MILLISECONDS;
                 }
-            }
-
-            if (bot_AI)
-            {
-                //TC_LOG_ERROR("entities.unit", "creature update for %u", m_spawnId);
             }
 
             Unit::AIUpdateTick(diff);
@@ -2186,7 +2185,7 @@ void Creature::setDeathState(DeathState s)
 void Creature::Respawn(bool force)
 {
     //npcbot
-    if (IsNPCBot())
+    if (IsNPCBotOrPet())
         return;
     //end npcbot
 
@@ -2253,6 +2252,11 @@ void Creature::Respawn(bool force)
 
 void Creature::ForcedDespawn(uint32 timeMSToDespawn, Seconds forceRespawnTimer)
 {
+    //npcbot
+    if (IsNPCBotOrPet())
+        return;
+    //end npcbot
+
     if (timeMSToDespawn)
     {
         m_Events.AddEvent(new ForcedDespawnDelayEvent(*this, forceRespawnTimer), m_Events.CalculateTime(Milliseconds(timeMSToDespawn)));
@@ -2876,6 +2880,11 @@ void Creature::RefreshCanSwimFlag(bool recheck)
 
 void Creature::AllLootRemovedFromCorpse()
 {
+    //npcbot
+    if (IsNPCBotOrPet())
+        return;
+    //end npcbot
+
     if (loot.loot_type != LOOT_SKINNING && !IsPet() && GetCreatureTemplate()->SkinLootId && hasLootRecipient())
         if (LootTemplates_Skinning.HaveLootFor(GetCreatureTemplate()->SkinLootId))
             SetUnitFlag(UNIT_FLAG_SKINNABLE);
