@@ -229,13 +229,13 @@ Map::EnterState MapManager::PlayerCannotEnter(uint32 mapid, Player* player, bool
 
 void MapManager::Update(uint32 diff)
 {
-    i_timer.Update(diff);
-    if (!i_timer.Passed())
-        return;
-
     //npcbot
     BotDataMgr::Update(diff);
     //end npcbot
+
+    i_timer.Update(diff);
+    if (!i_timer.Passed())
+        return;
 
     MapMapType::iterator iter = i_maps.begin();
     for (; iter != i_maps.end(); ++iter)
