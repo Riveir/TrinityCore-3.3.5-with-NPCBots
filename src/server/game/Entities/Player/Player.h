@@ -2211,7 +2211,6 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         /*****************************************************************/
         /***                        NPCBOT SYSTEM                      ***/
         /*****************************************************************/
-        void SetBotMgr(BotMgr* mgr) { ASSERT (!_botMgr); _botMgr = mgr; }
         BotMgr* GetBotMgr() const { return _botMgr; }
         bool HaveBot() const;
         uint8 GetNpcBotsCount() const;
