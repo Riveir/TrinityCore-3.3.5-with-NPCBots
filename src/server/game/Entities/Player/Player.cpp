@@ -409,7 +409,7 @@ Player::Player(WorldSession* session): Unit(true)
     m_groupUpdateTimer.Reset(5000);
 
     /////////////// NPCBot System //////////////////
-    _botMgr = nullptr;
+    _botMgr = new BotMgr(this);
     ///////////// End NPCBot System ////////////////
 }
 
@@ -448,11 +448,7 @@ Player::~Player()
     delete _cinematicMgr;
 
     //npcbot
-    if (_botMgr)
-    {
-        delete _botMgr;
-        _botMgr = nullptr;
-    }
+    delete _botMgr;
     //end npcbot
 
     sWorld->DecreasePlayerCount();
@@ -1366,9 +1362,9 @@ void Player::Update(uint32 p_time)
     //because we don't want player's ghost teleported from graveyard
     if (IsHasDelayedTeleport() && IsAlive())
         TeleportTo(m_teleport_dest, m_teleport_options);
+
     //NpcBot mod: Update
-    if (_botMgr)
-        _botMgr->Update(p_time);
+    _botMgr->Update(p_time);
     //end Npcbot
 }
 
@@ -2023,19 +2019,19 @@ bool Player::IsImmunedToSpellEffect(SpellInfo const* spellInfo, SpellEffectInfo 
 //NPCBOT
 bool Player::HaveBot() const
 {
-    return _botMgr && _botMgr->HaveBot();
+    return _botMgr->HaveBot();
 }
 uint8 Player::GetNpcBotsCount() const
 {
-    return _botMgr ? _botMgr->GetNpcBotsCount() : 0;
+    return _botMgr->GetNpcBotsCount();
 }
 void Player::RemoveAllBots(uint8 removetype)
 {
-    if (_botMgr) _botMgr->RemoveAllBots(removetype);
+    _botMgr->RemoveAllBots(removetype);
 }
 void Player::UpdatePhaseForBots()
 {
-    if (_botMgr) _botMgr->UpdatePhaseForBots();
+    _botMgr->UpdatePhaseForBots();
 }
 //END NPCBOT
 
@@ -2470,8 +2466,7 @@ void Player::SetGameMaster(bool on)
     }
 
     //npcbot: pet is handled already, bots are not, so do it
-    if (HaveBot())
-        _botMgr->OnOwnerSetGameMaster(on);
+    _botMgr->OnOwnerSetGameMaster(on);
     //end npcbot
 
     UpdateObjectVisibility();
@@ -2783,8 +2778,7 @@ void Player::GiveLevel(uint8 level)
     sScriptMgr->OnPlayerLevelChanged(this, oldLevel);
 
     //npcbot: force bots to update stats
-    if (HaveBot())
-        _botMgr->SetBotsShouldUpdateStats();
+    _botMgr->SetBotsShouldUpdateStats();
     //end npcbot
 }
 
@@ -22212,8 +22206,7 @@ void Player::UpdatePvP(bool state, bool _override)
     }
 
     //npcbot: update pvp flags for bots
-    if (HaveBot())
-        _botMgr->UpdatePvPForBots();
+    _botMgr->UpdatePvPForBots();
     //end npcbot
 }
 

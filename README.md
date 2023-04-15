@@ -1,5 +1,20 @@
 # ![logo](https://community.trinitycore.org/public/style_images/1_trinitycore.png) TrinityCore (3.3.5)
 
+--------------
+
+
+* [Build Status](#build-status)
+* [Introduction](#introduction)
+* [Requirements](#requirements)
+* [Install](#install)
+* [Reporting issues](#reporting-issues)
+* [Submitting fixes](#submitting-fixes)
+* [Copyright](#copyright)
+* [Authors &amp; Contributors](#authors--contributors)
+* [Links](#links)
+
+
+
 ## Build Status
 
 [![Fetch status](https://github.com/trickerer/NPCBots-cron/actions/workflows/automerge.yml/badge.svg)](https://github.com/trickerer/NPCBots-cron/actions/workflows/automerge.yml)
@@ -25,14 +40,14 @@ It is completely open source; community involvement is highly encouraged.
 ## Requirements
 
 
-Software requirements are available in the [wiki](https://www.trinitycore.info/display/tc/Requirements) for
-Windows, Linux and OS X.
+Software requirements are available in the [wiki](https://trinitycore.info/en/install/requirements) for
+Windows, Linux and macOS.
 
 
 ## Install
 
-Detailed TrinityCore installation guides are available in the [wiki](https://www.trinitycore.info/display/tc/Installation+Guide) for
-Windows, Linux and OS X.  
+Detailed TrinityCore installation guides are available in the [wiki](https://trinitycore.info/en/home) for
+Windows, Linux and macOS.
 NPCBots installation guide is available in the [NPCBots Readme](https://github.com/trickerer/Trinity-Bots#npcbot-mod-installation).
 
 
@@ -66,4 +81,5 @@ Read file [AUTHORS](AUTHORS).
 * [NPCBots Readme](https://github.com/trickerer/Trinity-Bots/)
 * [TrinityCore Website](https://www.trinitycore.org)
 * [TrinityCore Wiki](https://www.trinitycore.info)
-* [TrinityCore Forums](https://community.trinitycore.org)
+* [TrinityCore Forums](https://talk.trinitycore.org/)
+* [TrinityCore Discord](https://discord.trinitycore.org/)
