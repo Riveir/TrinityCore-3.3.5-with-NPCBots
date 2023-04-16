@@ -107,6 +107,9 @@ public:
 
                 queue.RemovePlayer(bot->GetGUID(), false);
 
+                //BG is set second time in Battleground::AddBot() but it's the same value so this is alright
+                bot->GetBotAI()->SetBG(bg);
+
                 TeamId teamId = BotDataMgr::GetTeamIdForFaction(bot->GetFaction());
                 BotMgr::TeleportBot(const_cast<Creature*>(bot), bgPlayer->GetMap(), bg->GetTeamStartPosition(teamId), true, false);
             }
@@ -928,6 +931,13 @@ void BotDataMgr::LoadWanderMap(bool reload)
         {
             TC_LOG_WARN("server.loading", "WP %u has invalid flags %u! Removing all invalid flags...", id, flags);
             flags &= (AsUnderlyingType(BotWPFlags::BOTWP_FLAG_END) - 1);
+        }
+
+        const uint32 nonbg_flags = AsUnderlyingType(BotWPFlags::BOTWP_FLAG_BG_FLAG_PICKUP_TARGET) | AsUnderlyingType(BotWPFlags::BOTWP_FLAG_BG_FLAG_DELIVER_TARGET);
+        if ((flags & nonbg_flags) && !mapEntry->IsBattleground())
+        {
+            TC_LOG_WARN("server.loading", "WP %u has BG-only flags %u for non-BG map %u! Removing...", id, (flags & nonbg_flags), mapEntry->ID);
+            flags &= ~nonbg_flags;
         }
 
         const uint32 conflicting_flags_1 = AsUnderlyingType(BotWPFlags::BOTWP_FLAG_ALLIANCE_ONLY) | AsUnderlyingType(BotWPFlags::BOTWP_FLAG_HORDE_ONLY);
@@ -2170,7 +2180,7 @@ Creature const* BotDataMgr::FindBot(uint32 entry)
     }
     return nullptr;
 }
-Creature const* BotDataMgr::FindBot(std::string_view name, LocaleConstant loc)
+Creature const* BotDataMgr::FindBot(std::string_view name, LocaleConstant loc, std::vector<uint32> const* not_ids)
 {
     std::wstring wname;
     if (Utf8toWStr(name, wname))
@@ -2179,6 +2189,9 @@ Creature const* BotDataMgr::FindBot(std::string_view name, LocaleConstant loc)
         std::shared_lock<std::shared_mutex> lock(*GetLock());
         for (NpcBotRegistry::const_iterator ci = _existingBots.cbegin(); ci != _existingBots.cend(); ++ci)
         {
+            if (not_ids && std::find(not_ids->cbegin(), not_ids->cend(), (*ci)->GetEntry()) != not_ids->cend())
+                continue;
+
             std::string basename = (*ci)->GetName();
             if (CreatureLocale const* creatureInfo = sObjectMgr->GetCreatureLocale((*ci)->GetEntry()))
             {
@@ -2384,17 +2397,21 @@ bool BotDataMgr::IsWanderNodeAvailableForBotFaction(WanderNode const* wp, uint32
     }
 }
 
-WanderNode const* BotDataMgr::GetNextWanderNode(WanderNode const* curNode, WanderNode const* lastNode, Position const* curPos, uint32 faction, uint32 lvl, bool random)
+WanderNode const* BotDataMgr::GetNextWanderNode(WanderNode const* curNode, WanderNode const* lastNode, Position const* fromPos, Creature const* bot, uint8 lvl, bool random)
 {
+    using NodeList = std::list<WanderNode const*>;
+
     static auto node_viable = [](WanderNode const* wp, uint8 lvl) -> bool {
         return (lvl + 2 >= wp->GetLevels().first && lvl <= wp->GetLevels().second);
     };
 
+    uint32 faction = bot->GetFaction();
+
     //Node got deleted (or forced)! Select close point and go from there
-    std::list<WanderNode const*> links;
+    NodeList links;
     if (curNode->GetLinks().empty() || random)
     {
-        WanderNode::DoForAllMapWPs(curNode->GetMapId(), [&links, lvl = lvl, fac = faction, pos = curPos](WanderNode const* wp) {
+        WanderNode::DoForAllMapWPs(curNode->GetMapId(), [&links, lvl = lvl, fac = faction, pos = fromPos](WanderNode const* wp) {
             if (pos->GetExactDist2d(wp) < MAX_WANDER_NODE_DISTANCE &&
                 IsWanderNodeAvailableForBotFaction(wp, fac, true) && node_viable(wp, lvl))
                 links.push_back(wp);
@@ -2405,7 +2422,7 @@ WanderNode const* BotDataMgr::GetNextWanderNode(WanderNode const* curNode, Wande
         //Select closest
         WanderNode const* node_new = nullptr;
         float mindist = 50000.0f; // Anywhere
-        WanderNode::DoForAllMapWPs(curNode->GetMapId(), [&node_new, &mindist, lvl = lvl, fac = faction, pos = curPos](WanderNode const* wp) {
+        WanderNode::DoForAllMapWPs(curNode->GetMapId(), [&node_new, &mindist, lvl = lvl, fac = faction, pos = fromPos](WanderNode const* wp) {
             float dist = pos->GetExactDist2d(wp);
             if (dist < mindist &&
                 IsWanderNodeAvailableForBotFaction(wp, fac, true) && node_viable(wp, lvl))
@@ -2415,6 +2432,41 @@ WanderNode const* BotDataMgr::GetNextWanderNode(WanderNode const* curNode, Wande
             }
         });
         return node_new;
+    }
+
+    if (bot_ai::IsFlagCarrier(bot))
+    {
+        NodeList flagDropNodes;
+        TeamId teamId = GetTeamIdForFaction(faction);
+        static const auto is_my_flag_drop_node = [](WanderNode const* dwp, TeamId tId) {
+            if (dwp->HasFlag(BotWPFlags::BOTWP_FLAG_BG_FLAG_DELIVER_TARGET))
+            {
+                //must only select own faction drop node
+                return (!dwp->HasFlag(BotWPFlags::BOTWP_FLAG_ALLIANCE_OR_HORDE_ONLY) ||
+                    (tId == TEAM_ALLIANCE && dwp->HasFlag(BotWPFlags::BOTWP_FLAG_ALLIANCE_ONLY)) ||
+                    (tId == TEAM_HORDE && dwp->HasFlag(BotWPFlags::BOTWP_FLAG_HORDE_ONLY)));
+            }
+            return false;
+        };
+        //check two levels of links, enough for: WSG
+        for (WanderNode const* dwp : curNode->GetLinks())
+        {
+            if (is_my_flag_drop_node(dwp, teamId))
+                flagDropNodes.push_back(dwp);
+            else
+            {
+                for (WanderNode const* dwpl : dwp->GetLinks())
+                {
+                    if (dwpl != curNode && is_my_flag_drop_node(dwpl, teamId))
+                    {
+                        flagDropNodes.push_back(dwp);
+                        break;
+                    }
+                }
+            }
+        }
+        if (!flagDropNodes.empty())
+            return flagDropNodes.size() == 1u ? flagDropNodes.front() : Trinity::Containers::SelectRandomContainerElement(flagDropNodes);
     }
 
     for (WanderNode const* wp : curNode->GetLinks())
