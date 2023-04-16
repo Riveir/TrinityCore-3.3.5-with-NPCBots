@@ -792,13 +792,13 @@ bool bot_ai::doCast(Unit* victim, uint32 spellId, TriggerCastFlags flags)
         return false;
 
     //for debug only
-    if (victim->isType(TYPEMASK_UNIT) && !victim->IsAlive() &&
+    if (victim->isType(TYPEMASK_UNIT) && victim->isDead() &&
         !(m_botSpellInfo->AttributesEx2 & SPELL_ATTR2_CAN_TARGET_DEAD) &&
         !m_botSpellInfo->HasEffect(SPELL_EFFECT_RESURRECT) &&
         !m_botSpellInfo->HasEffect(SPELL_EFFECT_RESURRECT_NEW) &&
         !m_botSpellInfo->HasEffect(SPELL_EFFECT_SELF_RESURRECT))
     {
-        TC_LOG_ERROR("entities.player", "bot_ai::doCast(): %s (bot class %u) tried to cast spell %u on a dead target %s",
+        TC_LOG_ERROR("npcbots", "bot_ai::doCast(): %s (bot class %u) tried to cast spell %u on a dead target %s",
             me->GetName().c_str(), _botclass, spellId, victim->GetName().c_str());
         //return false;
     }
@@ -6658,8 +6658,7 @@ void bot_ai::_OnManaRegenUpdate() const
         value += sqrt(_getTotalBotStat(BOT_STAT_MOD_INTELLECT)) * spiregen * me->GetTotalAuraMultiplierByMiscValue(SPELL_AURA_MOD_POWER_REGEN_PERCENT, POWER_MANA);
         // regen from SPELL_AURA_MOD_POWER_REGEN aura (per second)
         power_regen_mp5 = 0.2f * (me->GetTotalAuraModifierByMiscValue(SPELL_AURA_MOD_POWER_REGEN, POWER_MANA) + _getTotalBotStat(BOT_STAT_MOD_MANA_REGENERATION));
-        if (IAmFree())
-            power_regen_mp5 += float(mylevel);
+
         // bonus from SPELL_AURA_MOD_MANA_REGEN_FROM_STAT aura
         Unit::AuraEffectList const& regenAura = me->GetAuraEffectsByType(SPELL_AURA_MOD_MANA_REGEN_FROM_STAT);
         for (Unit::AuraEffectList::const_iterator i = regenAura.begin(); i != regenAura.end(); ++i)
@@ -16893,7 +16892,7 @@ void bot_ai::Evade()
     if (IsWanderer())
     {
         if (mapid != me->GetMap()->GetEntry()->ID || _evadeCount >= 30 || me->GetExactDist2d(pos) > MAX_WANDER_NODE_DISTANCE ||
-            (me->GetExactDist2d(pos) < 20.0f && me->GetExactDist(pos) > 100.0f))
+            me->GetPositionZ() <= INVALID_HEIGHT || (me->GetExactDist2d(pos) < 20.0f && me->GetExactDist(pos) > 100.0f))
         {
             TC_LOG_DEBUG("npcbots", "Bot %s id %u class %u level %u map %u TELEPORTING to node %u ('%s') map %u, %s, dist %.1f yd!",
                 me->GetName().c_str(), me->GetEntry(), uint32(_botclass), uint32(me->GetLevel()), me->GetMapId(), _travel_node_cur->GetWPId(),
@@ -16993,6 +16992,7 @@ void bot_ai::GetNextEvadeMovePoint(Position& pos, bool& use_path) const
 {
     //const uint8 evade_jump_threshold = me->HasUnitMovementFlag(MOVEMENTFLAG_SWIMMING) ? 50 : 25;
     const float base_angle = me->GetRelativeAngle(pos);
+    const float orig_z = pos.m_positionZ;
     float ground, floor;
 
     float fulldist = std::min<float>(me->GetExactDist2d(pos), float((MAX_POINT_PATH_LENGTH - 1) * SMOOTH_PATH_STEP_SIZE - 2.0f));
@@ -17014,7 +17014,7 @@ void bot_ai::GetNextEvadeMovePoint(Position& pos, bool& use_path) const
             {
                 me->UpdateGroundPositionZ(pos.m_positionX, pos.m_positionY, pos.m_positionZ);
                 if (pos.m_positionZ <= INVALID_HEIGHT)
-                    pos.m_positionZ = me->GetPositionZ() + GROUND_HEIGHT_TOLERANCE;
+                    pos.m_positionZ = orig_z;
             }
         }
 
@@ -17085,7 +17085,7 @@ void bot_ai::GetNextEvadeMovePoint(Position& pos, bool& use_path) const
     if (me->IsInWater() != !!(lstatus & MAP_LIQUID_STATUS_IN_CONTACT))
         mypos.m_positionZ = std::max<float>(ldata.level, mypos.m_positionZ);
     if (mypos.m_positionZ <= INVALID_HEIGHT)
-        mypos.m_positionZ = me->GetPositionZ();
+        mypos.m_positionZ = orig_z;
     pos.Relocate(mypos);
 }
 void bot_ai::TeleportHomeStart(bool reset)
