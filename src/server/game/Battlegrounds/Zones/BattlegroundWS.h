@@ -247,6 +247,7 @@ class BattlegroundWS : public Battleground
         void HandlePlayerKillBot(Creature* bot, Player* killer) override;
         void EventBotDroppedFlag(Creature* bot) override;
         void EventBotClickedOnFlag(Creature* bot, GameObject* target_obj) override;
+        void HandleBotAreaTrigger(Creature* bot, uint32 trigger) override;
         void EventBotCapturedFlag(Creature* bot);
         //end npcbot
 

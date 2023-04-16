@@ -878,6 +878,14 @@ bool VehicleJoinEvent::Execute(uint64, uint32)
             player->UnsummonPetTemporaryIfAny();
     }
 
+    //npcbot
+    if (Creature* bot = Passenger->ToCreature())
+    {
+        if (Battleground* bg = bot->GetBotBG())
+            bg->EventBotDroppedFlag(bot);
+    }
+    //end npcbot
+
     if (veSeat->HasFlag(VEHICLE_SEAT_FLAG_PASSENGER_NOT_SELECTABLE))
         Passenger->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
 
