@@ -31,6 +31,7 @@ struct PlayerClassLevelInfo;
 struct SpellNonMeleeDamage;
 
 class Aura;
+class Battleground;
 class DamageInfo;
 class GameObject;
 class Item;
@@ -164,6 +165,9 @@ class bot_ai : public CreatureAI
         bool IsWanderer() const { return _wanderer; }
         void SetWanderer();
         WanderNode const* GetNextTravelNode(Position const* from, bool random) const;
+        void OnWanderNodeReached();
+        Battleground* GetBG() const { return _bg; }
+        void SetBG(Battleground* bg) { _bg = bg; }
 
         static bool CCed(Unit const* target, bool root = false);
 
@@ -306,6 +310,8 @@ class bot_ai : public CreatureAI
         static bool IsDamagingSpell(SpellInfo const* spellInfo);
 
         bool IsImmunedToMySpellEffect(Unit const* unit, SpellInfo const* spellInfo, SpellEffIndex index) const;
+
+        static bool IsFlagCarrier(Unit const* unit, BattlegroundTypeId bgTypeId = BATTLEGROUND_TYPE_NONE);
 
     protected:
         explicit bot_ai(Creature* creature);
@@ -659,6 +665,7 @@ class bot_ai : public CreatureAI
         uint8 _baseLevel;
         WanderNode const* _travel_node_last;
         WanderNode const* _travel_node_cur;
+        Battleground* _bg;
 
         float _energyFraction;
 

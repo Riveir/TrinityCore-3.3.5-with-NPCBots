@@ -1,4 +1,5 @@
 #include "Battleground.h"
+#include "BattlegroundWS.h"
 #include "bot_ai.h"
 #include "bot_Events.h"
 #include "bot_GridNotifiers.h"
@@ -262,6 +263,7 @@ bot_ai::bot_ai(Creature* creature) : CreatureAI(creature)
     _baseLevel = 0;
     _travel_node_last = nullptr;
     _travel_node_cur = nullptr;
+    _bg = nullptr;
 
     opponent = nullptr;
     disttarget = nullptr;
@@ -4298,24 +4300,11 @@ std::tuple<Unit*, Unit*> bot_ai::_getTargets(bool byspell, bool ranged, bool &re
         if (IsWanderer())
         {
             //Try to prioritize flag carrier
-            if (me->GetMap()->GetEntry()->IsBattlegroundOrArena() && me->GetMap()->GetPlayersCountExceptGMs() > 0)
+            if (me->GetMap()->IsBattlegroundOrArena())
             {
                 for (decltype(unitList)::iterator it = unitList.begin(); it != unitList.end(); ++it)
                 {
-                    bool is_carrier = false;
-                    if ((*it)->HasAuraType(SPELL_AURA_EFFECT_IMMUNITY))
-                    {
-                        switch ((*it)->GetAuraEffectsByType(SPELL_AURA_EFFECT_IMMUNITY).front()->GetBase()->GetId())
-                        {
-                            case 23333: // Warsong Flag (WSG)
-                            case 23335: // Silverwing Flag (WSG)
-                                is_carrier = true;
-                                break;
-                            default:
-                                break;
-                        }
-                    }
-                    if (is_carrier && CanBotAttack(*it, byspell))
+                    if (IsFlagCarrier(*it) && CanBotAttack(*it, byspell))
                     {
                         closeList.push_back(*it);
                         break;
@@ -14588,16 +14577,13 @@ void bot_ai::JustDied(Unit* u)
 
     if (IsWanderer() && me->GetMap()->IsBattlegroundOrArena())
     {
-        if (me->GetMap()->GetPlayersCountExceptGMs() > 0)
+        if (Battleground const* bg = GetBG())
         {
-            if (Battleground const* bg = me->GetMap()->ToBattlegroundMap()->GetBG())
+            TeamId my_team = BotDataMgr::GetTeamIdForFaction(me->GetFaction());
+            if (WorldSafeLocsEntry const* gy = bg->GetClosestGraveyardForBot(*me, my_team == TEAM_HORDE ? HORDE : ALLIANCE))
             {
-                TeamId my_team = BotDataMgr::GetTeamIdForFaction(me->GetFaction());
-                if (WorldSafeLocsEntry const* gy = bg->GetClosestGraveyardForBot(*me, my_team == TEAM_HORDE ? HORDE : ALLIANCE))
-                {
-                    Position pos(gy->Loc.X, gy->Loc.Y, gy->Loc.Z, me->GetOrientation());
-                    Events.AddEventAtOffset([me = me, pos = pos]() { BotMgr::TeleportBot(me, me->GetMap(), &pos, true); }, 5s);
-                }
+                Position pos(gy->Loc.X, gy->Loc.Y, gy->Loc.Z, me->GetOrientation());
+                Events.AddEventAtOffset([me = me, pos = pos]() { BotMgr::TeleportBot(me, me->GetMap(), &pos, true); }, 5s);
             }
         }
     }
@@ -14647,10 +14633,9 @@ void bot_ai::KilledUnit(Unit* u)
     }
 
     //handle BG kill BvP, BvB
-    if (me->GetMap()->IsBattleground() && me->GetMap()->GetPlayersCountExceptGMs() > 0)
+    if (me->GetMap()->IsBattleground() && GetBG())
     {
-        Battleground* bg = me->GetMap()->ToBattlegroundMap()->GetBG();
-        ASSERT(bg);
+        Battleground* bg = GetBG();
         //could be removed from BG
         if (bg->GetPlayers().find(me->GetGUID()) != bg->GetPlayers().end() &&
             bg->GetPlayers().find(u->GetGUID()) != bg->GetPlayers().end())
@@ -16670,42 +16655,18 @@ bool bot_ai::GlobalUpdate(uint32 diff)
         else if (!IsCasting(mover) && (!IsShootingWand(mover) || Rand() < 10))
         {
             Unit const* mmover = !IAmFree() ? master : nullptr;
-            if (!mmover && me->GetMap()->IsBattleground() && !me->HasAuraType(SPELL_AURA_EFFECT_IMMUNITY))
+            if (!mmover && me->GetMap()->IsBattleground() && !IsFlagCarrier(me))
             {
                 //GET BG FOLLOW UNIT
-                static const std::function<bool(Unit const*)> wsg_carrier_pred = [](Unit const* u) {
-                    if (u->HasAuraType(SPELL_AURA_EFFECT_IMMUNITY)) {
-                        switch (u->GetAuraEffectsByType(SPELL_AURA_EFFECT_IMMUNITY).front()->GetBase()->GetId()) {
-                            case 23333: // Warsong Flag (WSG)
-                            case 23335: // Silverwing Flag (WSG)
-                                return true;
-                            default:
-                                break;
-                        }
-                    }
-                    return false;
+                static const std::function<bool(Unit const*)> flag_carrier_pred = [](Unit const* u) {
+                    return bot_ai::IsFlagCarrier(u);
                 };
 
-                std::function<bool(Unit const*)> const* my_pred = nullptr;
-                switch (me->GetMap()->GetId())
-                {
-                    case 489: //WSG
-                        my_pred = &wsg_carrier_pred;
-                        break;
-                    default:
-                        break;
-                }
-
-                if (my_pred)
-                {
-                    Unit* nmover = nullptr;
-                    Trinity::UnitSearcher searcher(me, nmover, *my_pred);
-                    Cell::VisitAllObjects(me, searcher, 80.0f);
-                    if (nmover)
-                        mmover = nmover;
-                    else
-                        RemoveBotCommandState(BOT_COMMAND_FOLLOW);
-                }
+                Unit* nmover = nullptr;
+                Trinity::UnitSearcher searcher(me, nmover, flag_carrier_pred);
+                Cell::VisitAllObjects(me, searcher, 80.0f);
+                if (nmover)
+                    mmover = nmover;
             }
 
             if (mmover)
@@ -16722,6 +16683,8 @@ bool bot_ai::GlobalUpdate(uint32 diff)
                 if (!HasBotCommandState(BOT_COMMAND_FOLLOW) || destPos.GetExactDist(&movepos) > maxdist)
                     SetBotCommandState(BOT_COMMAND_FOLLOW, true, &movepos);
             }
+            else
+                RemoveBotCommandState(BOT_COMMAND_FOLLOW);
         }
     }
 
@@ -16805,7 +16768,7 @@ void bot_ai::UpdateReviveTimer(uint32 diff)
         {
             BotMgr::ReviveBot(me);
 
-            if (IsWanderer())
+            if (IsWanderer() && me->GetMap()->GetEntry()->IsContinent())
             {
                 TeamId my_team = BotDataMgr::GetTeamIdForFaction(me->GetFaction());
                 WorldSafeLocsEntry const* gy = sObjectMgr->GetClosestGraveyard(me->GetPositionX(), me->GetPositionY(), me->GetPositionZ(), me->GetMapId(),
@@ -16948,6 +16911,8 @@ void bot_ai::Evade()
             }
             else if (IsWanderer())
             {
+                OnWanderNodeReached();
+
                 WanderNode const* nextNode = GetNextTravelNode(&pos, false);
                 if (!nextNode)
                 {
@@ -17233,7 +17198,57 @@ WanderNode const* bot_ai::GetNextTravelNode(Position const* from, bool random) c
 
     int8 mylevelbonus = BotDataMgr::GetLevelBonusForBotRank(me->GetCreatureTemplate()->rank);
     uint8 mylevelbase = std::max<int8>(int8(me->GetLevel()) - mylevelbonus, int8(BotDataMgr::GetMinLevelForBotClass(_botclass)));
-    return BotDataMgr::GetNextWanderNode(_travel_node_cur, _travel_node_last, from, me->GetFaction(), mylevelbase, random);
+    return BotDataMgr::GetNextWanderNode(_travel_node_cur, _travel_node_last, from, me, mylevelbase, random);
+}
+
+void bot_ai::OnWanderNodeReached()
+{
+    ASSERT(me->IsInWorld());
+    ASSERT(_travel_node_cur != nullptr, me->GetGUID().ToString().c_str());
+
+    if (Battleground* bg = GetBG())
+    {
+        if (_travel_node_cur->HasFlag(BotWPFlags::BOTWP_FLAG_BG_FLAG_DELIVER_TARGET) && IsFlagCarrier(me, bg->GetTypeID()))
+        {
+            switch (bg->GetTypeID())
+            {
+                case BATTLEGROUND_WS:
+                    if (bg->GetPlayerTeamId(me->GetGUID()) == TEAM_ALLIANCE && _travel_node_cur->HasFlag(BotWPFlags::BOTWP_FLAG_ALLIANCE_ONLY))
+                        bg->HandleBotAreaTrigger(me, 3646);
+                    if (bg->GetPlayerTeamId(me->GetGUID()) == TEAM_HORDE && _travel_node_cur->HasFlag(BotWPFlags::BOTWP_FLAG_HORDE_ONLY))
+                        bg->HandleBotAreaTrigger(me, 3647);
+                    break;
+                default:
+                    break;
+            }
+        }
+        if (_travel_node_cur->HasFlag(BotWPFlags::BOTWP_FLAG_BG_FLAG_PICKUP_TARGET) && !IsFlagCarrier(me, bg->GetTypeID()))
+        {
+            switch (bg->GetTypeID())
+            {
+                case BATTLEGROUND_WS:
+                    if (bg->GetPlayerTeamId(me->GetGUID()) == TEAM_ALLIANCE && _travel_node_cur->HasFlag(BotWPFlags::BOTWP_FLAG_HORDE_ONLY))
+                    {
+                        if (GameObject* go = bg->GetBGObject(BG_WS_OBJECT_H_FLAG, true))
+                        {
+                            //TC_LOG_ERROR("npcbots", "OnWanderNodeReached: [WSG] Horde flag dist: %f", me->GetExactDist(go));
+                            bg->EventBotClickedOnFlag(me, go);
+                        }
+                    }
+                    if (bg->GetPlayerTeamId(me->GetGUID()) == TEAM_HORDE && _travel_node_cur->HasFlag(BotWPFlags::BOTWP_FLAG_ALLIANCE_ONLY))
+                    {
+                        if (GameObject* go = bg->GetBGObject(BG_WS_OBJECT_A_FLAG, true))
+                        {
+                            //TC_LOG_ERROR("npcbots", "OnWanderNodeReached: [WSG] Alliance flag dist: %f", me->GetExactDist(go));
+                            bg->EventBotClickedOnFlag(me, go);
+                        }
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
 }
 
 void bot_ai::SetWanderer()
@@ -18229,6 +18244,48 @@ bool bot_ai::IsDamagingSpell(SpellInfo const* spellInfo)
 bool bot_ai::IsImmunedToMySpellEffect(Unit const* unit, SpellInfo const* spellInfo, SpellEffIndex index) const
 {
     return unit->IsImmunedToSpellEffect(spellInfo, spellInfo->GetEffect(index), me);
+}
+
+//BATTLEGROUNDS
+bool bot_ai::IsFlagCarrier(Unit const* unit, BattlegroundTypeId bgTypeId)
+{
+    if (unit->IsInWorld() && unit->GetMap()->IsBattleground() && unit->HasAuraType(SPELL_AURA_EFFECT_IMMUNITY))
+    {
+        uint32 spellId = unit->GetAuraEffectsByType(SPELL_AURA_EFFECT_IMMUNITY).front()->GetBase()->GetId();
+        switch (bgTypeId)
+        {
+            case BATTLEGROUND_TYPE_NONE: //must contain all possible checks
+                switch (spellId)
+                {
+                    case 23333: // Warsong Flag (WSG)
+                    case 23335: // Silverwing Flag (WSG)
+                        return true;
+                    default:
+                        break;
+                }
+                break;
+            case BATTLEGROUND_AV:
+                break;
+            case BATTLEGROUND_WS:
+                switch (spellId)
+                {
+                    case 23333: // Warsong Flag (WSG)
+                    case 23335: // Silverwing Flag (WSG)
+                        return true;
+                    default:
+                        break;
+                }
+                break;
+            case BATTLEGROUND_AB:
+            case BATTLEGROUND_EY:
+            case BATTLEGROUND_SA:
+            case BATTLEGROUND_IC:
+            default:
+                break;
+        }
+    }
+
+    return false;
 }
 
 #ifdef _MSC_VER
