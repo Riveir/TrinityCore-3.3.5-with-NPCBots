@@ -288,7 +288,7 @@ private:
         bot_template = *orig_template;
         bot_template.Entry = next_bot_id;
         bot_template.Title = "";
-        bot_template.speed_run = 1.05f;
+        bot_template.speed_run = BotMgr::GetBotWandererSpeedMod();
         bot_template.KillCredit[0] = orig_entry;
         //bot_template.type_flags |= CREATURE_TYPE_FLAG_FORCE_GOSSIP;
         if (bracketEntry)
