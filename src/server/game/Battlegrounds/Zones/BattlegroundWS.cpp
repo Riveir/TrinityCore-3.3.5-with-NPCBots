@@ -1051,6 +1051,42 @@ void BattlegroundWS::HandleAreaTrigger(Player* player, uint32 trigger)
     //    HandleTriggerBuff(buff_guid, player);
 }
 
+//npcbot
+void BattlegroundWS::HandleBotAreaTrigger(Creature* bot, uint32 trigger)
+{
+    if (GetStatus() != STATUS_IN_PROGRESS)
+        return;
+
+    switch (trigger)
+    {
+        case 3686:                                          // Alliance elixir of speed spawn. Trigger not working, because located inside other areatrigger, can be replaced by IsWithinDist(object, dist) in Battleground::Update().
+        case 3687:                                          // Horde elixir of speed spawn. Trigger not working, because located inside other areatrigger, can be replaced by IsWithinDist(object, dist) in Battleground::Update().
+        case 3706:                                          // Alliance elixir of regeneration spawn
+        case 3708:                                          // Horde elixir of regeneration spawn
+        case 3707:                                          // Alliance elixir of berserk spawn
+        case 3709:                                          // Horde elixir of berserk spawn
+        case 3649:                                          // unk1
+        case 3688:                                          // unk2
+        case 4628:                                          // unk3
+        case 4629:                                          // unk4
+            break;
+        case 3646:                                          // Alliance Flag spawn
+            if (_flagState[TEAM_HORDE] && !_flagState[TEAM_ALLIANCE])
+                if (GetFlagPickerGUID(TEAM_HORDE) == bot->GetGUID())
+                    EventBotCapturedFlag(bot);
+            break;
+        case 3647:                                          // Horde Flag spawn
+            if (_flagState[TEAM_ALLIANCE] && !_flagState[TEAM_HORDE])
+                if (GetFlagPickerGUID(TEAM_ALLIANCE) == bot->GetGUID())
+                    EventBotCapturedFlag(bot);
+            break;
+        default:
+            Battleground::HandleBotAreaTrigger(bot, trigger);
+            break;
+    }
+}
+//end npcbot
+
 bool BattlegroundWS::SetupBattleground()
 {
     // flags

@@ -31,6 +31,7 @@
 // npcbot
 class bot_ai;
 class bot_pet_ai;
+class Battleground;
 //end npcbot
 
 class CreatureAI;
@@ -388,6 +389,7 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         bool IsNPCBotOrPet() const override;
         bool IsFreeBot() const;
         bool IsWandererBot() const;
+        Battleground* GetBotBG() const;
         uint8 GetBotClass() const;
         uint32 GetBotRoles() const;
         bot_ai* GetBotAI() const { return bot_AI; }
