@@ -630,6 +630,12 @@ void BotDataMgr::LoadNpcBots(bool spawn)
             index = 0;
             uint32 entry = field[  index].GetUInt32();
 
+            if (!sObjectMgr->GetCreatureTemplate(entry))
+            {
+                TC_LOG_ERROR("server.loading", "Bot entry %u has appearance data but doesn't exist in `creature_template` table! Skipped.", entry);
+                continue;
+            }
+
             NpcBotAppearanceData* appearanceData = new NpcBotAppearanceData();
             appearanceData->gender =    field[++index].GetUInt8();
             appearanceData->skin =      field[++index].GetUInt8();
@@ -657,6 +663,12 @@ void BotDataMgr::LoadNpcBots(bool spawn)
             index = 0;
             uint32 entry =      field[  index].GetUInt32();
 
+            if (!sObjectMgr->GetCreatureTemplate(entry))
+            {
+                TC_LOG_ERROR("server.loading", "Bot entry %u has extras data but doesn't exist in `creature_template` table! Skipped.", entry);
+                continue;
+            }
+
             NpcBotExtras* extras = new NpcBotExtras();
             extras->bclass =    field[++index].GetUInt8();
             extras->race =      field[++index].GetUInt8();
@@ -679,6 +691,12 @@ void BotDataMgr::LoadNpcBots(bool spawn)
             field = result->Fetch();
             index = 0;
             uint32 entry =          field[  index].GetUInt32();
+
+            if (!sObjectMgr->GetCreatureTemplate(entry))
+            {
+                TC_LOG_ERROR("server.loading", "Bot entry %u has transmog data but doesn't exist in `creature_template` table! Skipped.", entry);
+                continue;
+            }
 
             if (_botsTransmogData.count(entry) == 0)
                 _botsTransmogData[entry] = new NpcBotTransmogData();
@@ -718,6 +736,12 @@ void BotDataMgr::LoadNpcBots(bool spawn)
             index = 0;
             uint32 entry =          field[  index].GetUInt32();
 
+            if (!sObjectMgr->GetCreatureTemplate(entry))
+            {
+                TC_LOG_ERROR("server.loading", "Bot entry %u doesn't exist in `creature_template` table! Skipped.", entry);
+                continue;
+            }
+
             //load data
             botData = new NpcBotData(0, 0);
             botData->owner =        field[++index].GetUInt32();
@@ -749,11 +773,6 @@ void BotDataMgr::LoadNpcBots(bool spawn)
             {
                 uint32 entry = *itr;
                 proto = sObjectMgr->GetCreatureTemplate(entry);
-                if (!proto)
-                {
-                    TC_LOG_ERROR("server.loading", "Cannot find creature_template entry for npcbot (id: %u)!", entry);
-                    continue;
-                }
                 //                                     1     2    3           4            5           6
                 infores = WorldDatabase.PQuery("SELECT guid, map, position_x, position_y"/*, position_z, orientation*/" FROM creature WHERE id = %u", entry);
                 if (!infores)
