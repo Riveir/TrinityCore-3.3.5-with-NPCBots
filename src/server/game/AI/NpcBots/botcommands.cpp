@@ -407,7 +407,7 @@ public:
         WanderNode_AI(Creature* creature, WanderNode* wp) : CreatureAI(creature), _wp(wp)
         { _wp->SetCreature(me); }
 
-        void OnDespawn() override { _wp->SetCreature(nullptr); }
+        void JustDied(Unit*) override { _wp->SetCreature(nullptr); }
 
         bool CanAIAttack(Unit const*) const override { return false; }
         void MoveInLineOfSight(Unit*) override {}
@@ -853,7 +853,7 @@ public:
 
         if (!linkIds)
         {
-            handler->SendSysMessage("Syntax: npcbot wp links set #[ids...]");
+            handler->SendSysMessage("Syntax: npcbot wp links set #[ids...] #[oneway: true/false]");
             handler->SetSentErrorMessage(true);
             return false;
         }
