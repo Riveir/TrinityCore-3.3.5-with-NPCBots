@@ -819,7 +819,15 @@ void Battleground::EndBattleground(uint32 winner)
         bnext = bitr;
         ++bnext;
         if (bitr->first.IsCreature())
-            RemovePlayerAtLeave(bitr->first, true, true);
+        {
+            if (Creature const* bot = BotDataMgr::FindBot(bitr->first.GetEntry()))
+            {
+                if (!bot->IsAlive())
+                    BotMgr::ReviveBot(const_cast<Creature*>(bot));
+                else
+                    const_cast<Creature*>(bot)->SetFullHealth();
+            }
+        }
     }
     //end npcbot
 
