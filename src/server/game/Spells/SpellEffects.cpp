@@ -1958,7 +1958,7 @@ void Spell::EffectOpenLock()
         return;
 
     //npcbot
-    if (m_caster->IsNPCBot())
+    if (m_caster->IsNPCBot() && gameObjTarget)
     {
         GameObjectTemplate const* botGoInfo = gameObjTarget->GetGOInfo();
         Creature* bot = m_caster->ToCreature();
