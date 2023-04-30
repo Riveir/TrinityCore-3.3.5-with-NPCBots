@@ -1004,6 +1004,8 @@ void Battleground::RemovePlayerAtLeave(ObjectGuid guid, bool Transport, bool Sen
         if (bot->HasAuraType(SPELL_AURA_SPIRIT_OF_REDEMPTION))
             const_cast<Creature*>(bot)->RemoveAurasByType(SPELL_AURA_MOD_SHAPESHIFT);
         const_cast<Creature*>(bot)->RemoveAurasByType(SPELL_AURA_MOUNTED);
+        const_cast<Creature*>(bot)->RemoveUnitFlag(UNIT_FLAG_IMMUNE);
+        const_cast<Creature*>(bot)->ClearUnitState(UNIT_STATE_STUNNED);
 
         bot->GetBotAI()->SetBG(nullptr);
         if (bot->IsWandererBot())
