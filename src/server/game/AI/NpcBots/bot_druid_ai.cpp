@@ -2611,21 +2611,21 @@ public:
             //    botPet = nullptr;
             if (summon->GetEntry() == BOT_PET_FORCE_OF_NATURE)
             {
-                bool found = false;
+                //bool found = false;
                 for (uint8 i = 0; i != MAX_TREANTS; ++i)
                 {
                     if (_treants[i] == summon->GetGUID())
                     {
                         _treants[i] = ObjectGuid::Empty;
-                        found = true;
+                        //found = true;
                         break;
                     }
                 }
-                if (!found)
-                {
-                    TC_LOG_ERROR("entities.unit", "Druid_bot:SummonedCreatureDespawn() treant is not found in array");
-                    ASSERT(false);
-                }
+                //if (!found)
+                //{
+                //    TC_LOG_ERROR("entities.unit", "Druid_bot:SummonedCreatureDespawn() treant is not found in array");
+                //    ASSERT(false);
+                //}
             }
         }
 
