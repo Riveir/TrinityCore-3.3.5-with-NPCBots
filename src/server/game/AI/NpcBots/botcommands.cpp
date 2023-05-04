@@ -2637,8 +2637,7 @@ public:
         bot->GetBotAI()->Reset();
         bot->GetBotAI()->canUpdate = false;
 
-        CreatureData const* data = sObjectMgr->GetCreatureData(bot->GetSpawnId());
-        ASSERT_NOTNULL(data);
+        CreatureData const* data = ASSERT_NOTNULL(sObjectMgr->GetCreatureData(bot->GetSpawnId()));
         if (bot->IsInWorld() && data->mapId != bot->GetMap()->GetId())
             bot->GetMap()->AddObjectToRemoveList(bot);
 
