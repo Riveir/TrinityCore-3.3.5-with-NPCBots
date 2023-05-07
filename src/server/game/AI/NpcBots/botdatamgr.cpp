@@ -124,7 +124,7 @@ public:
     void Abort(uint64 /*e_time*/) override { AbortMe(); }
 };
 
-void SpawnWanderergBot(uint32 bot_id, WanderNode const* spawnLoc, NpcBotRegistry* registry)
+void SpawnWandererBot(uint32 bot_id, WanderNode const* spawnLoc, NpcBotRegistry* registry)
 {
     CreatureTemplate const& bot_template = _botsWanderCreatureTemplates.at(bot_id);
     NpcBotData const* bot_data = BotDataMgr::SelectNpcBotData(bot_id);
@@ -142,12 +142,6 @@ void SpawnWanderergBot(uint32 bot_id, WanderNode const* spawnLoc, NpcBotRegistry
         spawnLoc->GetMapId(), spawnLoc->ToString().c_str(), spawnLoc->GetName().c_str());
 
     Creature* bot = new Creature();
-    if (!bot->Create(map->GenerateLowGuid<HighGuid::Unit>(), map, PHASEMASK_NORMAL, bot_id, *spawnLoc))
-    {
-        delete bot;
-        TC_LOG_FATAL("server.loading", "Creature is not created!");
-        ASSERT(false);
-    }
     if (!bot->LoadBotCreatureFromDB(0, map, true, true, bot_id, &spawnPos))
     {
         delete bot;
@@ -330,10 +324,10 @@ private:
         ASSERT(c.IsCoordValid(), "Invalid Cell coord!");
         ASSERT(g.IsCoordValid(), "Invalid Grid coord!");
         Map* map = sMapMgr->CreateBaseMap(spawnLoc->GetMapId());
-        ASSERT(map->GetEntry()->IsContinent() || map->GetEntry()->IsBattlegroundOrArena(), map->GetDebugInfo().c_str());
+        ASSERT(map->GetEntry()->IsContinent() || map->GetEntry()->IsBattlegroundOrArena(), "%s", map->GetDebugInfo().c_str());
 
         if (immediate)
-            SpawnWanderergBot(next_bot_id, spawnLoc, registry);
+            SpawnWandererBot(next_bot_id, spawnLoc, registry);
         else
             _botsWanderCreaturesToSpawn.push_back({ next_bot_id, spawnLoc });
 
@@ -583,7 +577,7 @@ void BotDataMgr::Update(uint32 diff)
 
             _botsWanderCreaturesToSpawn.pop_front();
 
-            SpawnWanderergBot(bot_id, spawnLoc, nullptr);
+            SpawnWandererBot(bot_id, spawnLoc, nullptr);
         }
 
         return;
@@ -1108,7 +1102,7 @@ void BotDataMgr::LoadWanderMap(bool reload)
                         ss << '-';
                 }
                 ss << " is isolated!";
-                TC_LOG_INFO("server.loading", ss.str().c_str());
+                TC_LOG_INFO("server.loading", "%s", ss.str().c_str());
             }
         }
     });
@@ -2536,9 +2530,19 @@ public:
             gain *= WANDERING_BOT_XP_GAIN_MULT;
     }
 };
-void AddSC_wandering_bot_xp_gain_script()
+
+class TC_GAME_API BotDataMgrShutdownScript : public WorldScript
+{
+public:
+    BotDataMgrShutdownScript() : WorldScript("BotDataMgrShutdownScript") {}
+
+    void OnShutdown() override { botDataEvents.KillAllEvents(true); }
+};
+
+void AddSC_botdatamgr_scripts()
 {
     new WanderingBotXpGainFormulaScript();
+    new BotDataMgrShutdownScript();
 }
 
 #ifdef _MSC_VER
