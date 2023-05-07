@@ -14007,7 +14007,7 @@ void bot_ai::InitEquips()
                 gss << " [" << uint32(i) << "] " << _equips[i]->GetTemplate()->Name1 << " (" << _equips[i]->GetEntry() << ')';
             }
         }
-        TC_LOG_TRACE("npcbots", gss.str().c_str());
+        TC_LOG_TRACE("npcbots", "%s", gss.str().c_str());
     }
     else
     {
@@ -17253,7 +17253,7 @@ void bot_ai::TeleportHome(bool reset)
     GetHomePosition(mapid, &pos);
 
     Map* map = sMapMgr->CreateBaseMap(mapid);
-    ASSERT(!map->Instanceable(), map->GetDebugInfo().c_str());
+    ASSERT(!map->Instanceable(), "%s", map->GetDebugInfo().c_str());
     BotMgr::TeleportBot(me, map, &pos, false, reset);
 
     spawned = false;
@@ -17380,7 +17380,7 @@ WanderNode const* bot_ai::GetNextTravelNode(Position const* from, bool random) c
 void bot_ai::OnWanderNodeReached()
 {
     ASSERT(me->IsInWorld());
-    ASSERT(_travel_node_cur != nullptr, me->GetGUID().ToString().c_str());
+    ASSERT(_travel_node_cur != nullptr, "%s", me->GetGUID().ToString().c_str());
 
     if (Battleground* bg = GetBG())
     {
