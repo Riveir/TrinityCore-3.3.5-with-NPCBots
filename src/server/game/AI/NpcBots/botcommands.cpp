@@ -586,7 +586,7 @@ public:
         ASSERT(c.IsCoordValid(), "Invalid Cell coord!");
         ASSERT(g.IsCoordValid(), "Invalid Grid coord!");
         map->LoadGrid(wp->m_positionX, wp->m_positionY);
-        ASSERT(map->GetEntry()->IsContinent() || map->GetEntry()->IsBattlegroundOrArena(), map->GetDebugInfo().c_str());
+        ASSERT(map->GetEntry()->IsContinent() || map->GetEntry()->IsBattlegroundOrArena(), "%s", map->GetDebugInfo().c_str());
 
         TempSummon* wpc = map->SummonCreature(VISUAL_WAYPOINT, *wp);
         wpc->SetTempSummonType(TEMPSUMMON_CORPSE_DESPAWN);
