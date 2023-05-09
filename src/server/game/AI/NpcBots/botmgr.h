@@ -126,6 +126,7 @@ class TC_GAME_API BotMgr
         static float GetBotWandererHPMod();
         static float GetBotWandererSpeedMod();
         static float GetBotDamageModByClass(uint8 botclass);
+        static float GetBotDamageModByLevel(uint8 botlevel);
 
         static void Initialize();
         static void ReloadConfig();
