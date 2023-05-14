@@ -2043,10 +2043,7 @@ void SpellMgr::LoadEnchantCustomAttr()
     uint32 oldMSTime = getMSTime();
 
     uint32 size = sSpellItemEnchantmentStore.GetNumRows();
-    mEnchantCustomAttr.resize(size);
-
-    for (uint32 i = 0; i < size; ++i)
-       mEnchantCustomAttr[i] = 0;
+    mEnchantCustomAttr.resize(size, false);
 
     uint32 count = 0;
     for (uint32 i = 0; i < GetSpellInfoStoreSize(); ++i)
