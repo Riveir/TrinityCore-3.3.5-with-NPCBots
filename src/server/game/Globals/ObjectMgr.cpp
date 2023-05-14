@@ -1220,7 +1220,7 @@ void ObjectMgr::CheckCreatureTemplate(CreatureTemplate const* cInfo)
     }
 
     //npcbot: skip flags check and damage multiplier
-    if (cInfo->flags_extra & (CREATURE_FLAG_EXTRA_NPCBOT | CREATURE_FLAG_EXTRA_NPCBOT_PET))
+    if (cInfo->IsNPCBotOrPet())
         return;
     //end npcbot
 

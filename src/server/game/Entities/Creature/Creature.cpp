@@ -3572,7 +3572,7 @@ void Creature::ExitVehicle(Position const* /*exitPosition*/)
 //NPCBOT
 bool Creature::LoadBotCreatureFromDB(ObjectGuid::LowType spawnId, Map* map, bool addToMap, bool generated, uint32 entry, Position const* pos)
 {
-    CreatureData const* data = sObjectMgr->GetCreatureData(spawnId);
+    CreatureData const* data = generated ? nullptr : sObjectMgr->GetCreatureData(spawnId);
     if (!data)
     {
         if (!generated)
@@ -3640,17 +3640,17 @@ Unit* Creature::GetBotsPet() const
 
 bool Creature::IsNPCBot() const
 {
-    return GetCreatureTemplate()->flags_extra & CREATURE_FLAG_EXTRA_NPCBOT;
+    return GetCreatureTemplate()->IsNPCBot();
 }
 
 bool Creature::IsNPCBotPet() const
 {
-    return GetCreatureTemplate()->flags_extra & CREATURE_FLAG_EXTRA_NPCBOT_PET;
+    return GetCreatureTemplate()->IsNPCBotPet();
 }
 
 bool Creature::IsNPCBotOrPet() const
 {
-    return IsNPCBot() || IsNPCBotPet();
+    return GetCreatureTemplate()->IsNPCBotOrPet();
 }
 
 bool Creature::IsFreeBot() const

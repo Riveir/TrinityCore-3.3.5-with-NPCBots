@@ -819,7 +819,21 @@ void Battleground::EndBattleground(uint32 winner)
         bnext = bitr;
         ++bnext;
         if (bitr->first.IsCreature())
-            RemovePlayerAtLeave(bitr->first, true, true);
+        {
+            if (Creature const* bot = BotDataMgr::FindBot(bitr->first.GetEntry()))
+            {
+                if (!bot->IsAlive())
+                    BotMgr::ReviveBot(const_cast<Creature*>(bot));
+                else
+                {
+                    bot->GetBotAI()->UnsummonAll();
+                    const_cast<Creature*>(bot)->InterruptNonMeleeSpells(true);
+                    const_cast<Creature*>(bot)->RemoveAllControlled();
+                    const_cast<Creature*>(bot)->SetUnitFlag(UNIT_FLAG_IMMUNE);
+                    const_cast<Creature*>(bot)->AddUnitState(UNIT_STATE_STUNNED);
+                }
+            }
+        }
     }
     //end npcbot
 
@@ -990,6 +1004,8 @@ void Battleground::RemovePlayerAtLeave(ObjectGuid guid, bool Transport, bool Sen
         if (bot->HasAuraType(SPELL_AURA_SPIRIT_OF_REDEMPTION))
             const_cast<Creature*>(bot)->RemoveAurasByType(SPELL_AURA_MOD_SHAPESHIFT);
         const_cast<Creature*>(bot)->RemoveAurasByType(SPELL_AURA_MOUNTED);
+        const_cast<Creature*>(bot)->RemoveUnitFlag(UNIT_FLAG_IMMUNE);
+        const_cast<Creature*>(bot)->ClearUnitState(UNIT_STATE_STUNNED);
 
         bot->GetBotAI()->SetBG(nullptr);
         if (bot->IsWandererBot())

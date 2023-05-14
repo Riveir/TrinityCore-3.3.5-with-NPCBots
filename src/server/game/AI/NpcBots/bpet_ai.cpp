@@ -71,6 +71,8 @@ bot_pet_ai::bot_pet_ai(Creature* creature) : CreatureAI(creature)
     m_botCommandState = BOT_COMMAND_FOLLOW;
     regenTimer = 0;
     waitTimer = 0;
+    indoorsTimer = 0;
+    outdoorsTimer = 0;
     GC_Timer = 0;
     lastdiff = 0;
     _energyFraction = 0.f;
@@ -2205,9 +2207,11 @@ bool bot_pet_ai::GlobalUpdate(uint32 diff)
         for (uint8 i = CURRENT_FIRST_NON_MELEE_SPELL; i != CURRENT_AUTOREPEAT_SPELL; ++i)
         {
             interrupt = false;
-            Spell const* spell = me->GetCurrentSpell(CurrentSpellTypes(i));
+            Spell* spell = me->GetCurrentSpell(CurrentSpellTypes(i));
             if (!spell)
                 continue;
+            if (spell->m_targets.GetObjectTargetGUID().IsAnyTypeCreature())
+                spell->m_targets.Update(me);
             Unit const* target = spell->m_targets.GetUnitTarget();
             if (!target)
                 continue;
@@ -2433,6 +2437,14 @@ bool bot_pet_ai::JumpingOrFalling() const
 bool bot_pet_ai::Jumping() const
 {
     return me->HasUnitState(UNIT_STATE_JUMPING);
+}
+bool bot_pet_ai::IsIndoors() const
+{
+    return indoorsTimer >= INOUTDOORS_ENSURE_TIMER && outdoorsTimer == 0;
+}
+bool bot_pet_ai::IsOutdoors() const
+{
+    return outdoorsTimer >= INOUTDOORS_ENSURE_TIMER && indoorsTimer == 0;
 }
 
 uint32 bot_pet_ai::GetLostHP(Unit const* unit)

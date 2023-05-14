@@ -232,7 +232,7 @@ public:
                 me->GetLevel() < 30 || me->GetPower(POWER_MANA) < UNHOLY_FRENZY_COST || Rand() > 35)
                 return;
 
-            static auto frenzy_pred_player = [=](Unit const* pl) -> bool {
+            static auto frenzy_pred_player = [this](Unit const* pl) -> bool {
                 return (pl->GetVictim() && pl->IsInCombat() && IsMeleeClass(pl->GetClass()) && !IsTank(pl) &&
                     me->GetDistance(pl) < 30 && pl->GetDistance(pl->GetVictim()) < 15 &&
                     pl->getAttackers().empty() && !CCed(pl, true) &&
@@ -319,11 +319,11 @@ public:
             //Interrupt corpse-usage spells if no longer usable
             if (Spell const* spell = me->GetCurrentSpell(CURRENT_GENERIC_SPELL))
             {
-                if (Unit const* target = spell->m_targets.GetUnitTarget())
+                if ((spell->GetSpellInfo()->GetFirstRankSpell()->Id == RAISE_DEAD_1 ||
+                    spell->GetSpellInfo()->GetFirstRankSpell()->Id == CORPSE_EXPLOSION_1))
                 {
-                    if ((spell->GetSpellInfo()->GetFirstRankSpell()->Id == RAISE_DEAD_1 ||
-                        spell->GetSpellInfo()->GetFirstRankSpell()->Id == CORPSE_EXPLOSION_1) &&
-                        target->GetDisplayId() != target->GetNativeDisplayId())
+                    Unit const* target = ObjectAccessor::GetUnit(*me, spell->m_targets.GetObjectTargetGUID());
+                    if (target && target->GetDisplayId() != target->GetNativeDisplayId())
                         me->InterruptSpell(CURRENT_GENERIC_SPELL);
                 }
             }

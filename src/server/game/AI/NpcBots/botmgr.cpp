@@ -37,6 +37,12 @@ TODO: Move creature hooks here
 # pragma warning(push, 4)
 #endif
 
+#ifdef AC_COMPILER
+# define GetBoolDefault GetOption<bool>
+# define GetIntDefault GetOption<int32>
+# define GetFloatDefault GetOption<float>
+#endif
+
 static std::list<BotMgr::delayed_teleport_callback_type> delayed_bot_teleports;
 
 //config
@@ -118,6 +124,7 @@ float _mult_dmg_spellbreaker;
 float _mult_dmg_darkranger;
 float _mult_dmg_necromancer;
 float _mult_dmg_seawitch;
+std::vector<float> _mult_dmg_levels;
 
 bool __firstload = true;
 
@@ -153,7 +160,7 @@ void AddSC_mage_bot_pets();
 void AddSC_druid_bot_pets();
 void AddSC_script_bot_commands();
 void AddSC_script_bot_giver();
-void AddSC_wandering_bot_xp_gain_script();
+void AddSC_botdatamgr_scripts();
 
 void AddNpcBotScripts()
 {
@@ -189,7 +196,7 @@ void AddNpcBotScripts()
     AddSC_druid_bot_pets();
     AddSC_script_bot_commands();
     AddSC_script_bot_giver();
-    AddSC_wandering_bot_xp_gain_script();
+    AddSC_botdatamgr_scripts();
 }
 
 BotMgr::BotMgr(Player* const master) : _owner(master), _dpstracker(new DPSTracker())
@@ -309,6 +316,20 @@ void BotMgr::LoadConfig(bool reload)
     _botStatLimits_crit             = sConfigMgr->GetFloatDefault("NpcBot.Stats.Limits.Crit", 95.0f);
     _desiredWanderingBotsCount      = sConfigMgr->GetIntDefault("NpcBot.WanderingBots.Continents.Count", 0);
     _enableWanderingBotsBG          = sConfigMgr->GetBoolDefault("NpcBot.WanderingBots.BG.Enable", false);
+
+    std::string mult_dps_by_levels  = sConfigMgr->GetStringDefault("NpcBot.Mult.Damage.Levels", "1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0");
+    std::vector<std::string_view> toks = Trinity::Tokenize(mult_dps_by_levels, ',', false);
+    ASSERT(toks.size() >= DEFAULT_MAX_LEVEL / 10 + 1, "NpcBot.Mult.Damage.Levels must has at least %u values", DEFAULT_MAX_LEVEL / 10 + 1);
+    _mult_dmg_levels.reserve(toks.size());
+    for (decltype(toks)::size_type i = 0; i != toks.size(); ++i)
+    {
+        Optional<float> val = Trinity::StringTo<float>(toks[i]);
+        if (val == std::nullopt)
+            TC_LOG_ERROR("server.loading", "NpcBot.Mult.Damage.Levels contains invalid float value '%s', set to default", std::string(toks[i]).c_str());
+        float fval = val.value_or(1.0f);
+        RoundToInterval(fval, 0.1f, 10.f);
+        _mult_dmg_levels.push_back(fval);
+    }
 
     //limits
     RoundToInterval(_mult_dmg_physical, 0.1f, 10.f);
@@ -1139,7 +1160,7 @@ void BotMgr::CleanupsBeforeBotDelete(Creature* bot)
     bot->AttackStop();
     bot->CombatStopWithPets(true);
 
-    //bot->SetOwnerGUID(ObjectGuid::Empty);
+    bot->SetOwnerGUID(ObjectGuid::Empty);
     //_owner->m_Controlled.erase(bot);
     bot->SetControlledByPlayer(false);
     //bot->RemoveUnitFlag(UNIT_FLAG_PVP_ATTACKABLE);
@@ -1307,7 +1328,8 @@ BotAddResult BotMgr::AddBot(Creature* bot)
     _bots[bot->GetGUID()] = bot;
 
     ASSERT(!bot->GetCreatorGUID());
-    //bot->SetOwnerGUID(_owner->GetGUID());
+    ASSERT(!bot->GetOwnerGUID());
+    bot->SetOwnerGUID(_owner->GetGUID());
     bot->SetCreator(_owner); //needed in case of FFAPVP
     //_owner->m_Controlled.insert(bot);
     bot->SetControlledByPlayer(true);
@@ -2054,6 +2076,14 @@ float BotMgr::GetBotDamageModByClass(uint8 botclass)
         default:
             return 1.0;
     }
+}
+
+float BotMgr::GetBotDamageModByLevel(uint8 botlevel)
+{
+    uint8 bracket = botlevel / 10;
+    if (bracket < _mult_dmg_levels.size())
+        return _mult_dmg_levels[bracket];
+    return 1.0f;
 }
 
 void BotMgr::InviteBotToBG(ObjectGuid botguid, GroupQueueInfo* ginfo, Battleground* bg)

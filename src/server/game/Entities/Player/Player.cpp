@@ -744,7 +744,7 @@ void Player::SendMirrorTimer(MirrorTimerType Type, uint32 MaxValue, uint32 Curre
         return;
     }
 
-    SendDirectMessage(WorldPackets::Misc::StartMirrorTimer(Type, CurrentValue, MaxValue, Regen, 0, 0).Write());
+    SendDirectMessage(WorldPackets::Misc::StartMirrorTimer(Type, CurrentValue, MaxValue, Regen, false, 0).Write());
 }
 
 void Player::StopMirrorTimer(MirrorTimerType Type)
@@ -24552,7 +24552,8 @@ void Player::SetBattlegroundOrBattlefieldRaid(Group* group, int8 subgroup)
             if (!bot || !GetGroup()->IsMember(bot->GetGUID()))
                 continue;
 
-            ASSERT(group->AddMember(bot));
+            if (!group->IsMember(itr->first))
+                group->AddMember(bot);
         }
     }
     //end npcbot
