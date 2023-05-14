@@ -1036,7 +1036,7 @@ bool Unit::HasBreakableByDamageCrowdControlAura(Unit* excludeCasterChannel) cons
     }
 
     // make player victims stand up automatically
-    if (victim->GetStandState() && victim->IsPlayer())
+    if (victim->GetStandState() && victim->IsPlayer() && damagetype != NODAMAGE && damagetype != DOT)
         victim->SetStandState(UNIT_STAND_STATE_STAND);
 
     return damage;
@@ -3588,7 +3588,7 @@ void Unit::_ApplyAura(AuraApplication* aurApp, uint8 effMask)
         return;
 
     // Sitdown on apply aura req seated
-    if (aura->GetSpellInfo()->AuraInterruptFlags & AURA_INTERRUPT_FLAG_NOT_SEATED && !IsSitState())
+    if (aura->GetSpellInfo()->AuraInterruptFlags & AURA_INTERRUPT_FLAG_NOT_SEATED && IsStandState())
         SetStandState(UNIT_STAND_STATE_SIT);
 
     Unit* caster = aura->GetCaster();
@@ -9700,6 +9700,11 @@ float Unit::GetWeaponDamageRange(WeaponAttackType attType, WeaponDamageRange typ
 
 bool Unit::CanFreeMove() const
 {
+    //npcbot: skip owner guid condition for bots
+    if (IsNPCBotOrPet())
+        return !HasUnitState(UNIT_STATE_CONFUSED | UNIT_STATE_FLEEING | UNIT_STATE_IN_FLIGHT |
+            UNIT_STATE_ROOT | UNIT_STATE_STUNNED | UNIT_STATE_DISTRACTED);
+    //end npcbot
     return !HasUnitState(UNIT_STATE_CONFUSED | UNIT_STATE_FLEEING | UNIT_STATE_IN_FLIGHT |
         UNIT_STATE_ROOT | UNIT_STATE_STUNNED | UNIT_STATE_DISTRACTED) && GetOwnerGUID().IsEmpty();
 }
