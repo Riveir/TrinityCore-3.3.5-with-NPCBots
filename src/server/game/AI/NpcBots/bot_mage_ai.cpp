@@ -410,6 +410,10 @@ public:
 
             StartAttack(mytar, IsMelee());
 
+            CheckAttackState();
+            if (!me->IsAlive())
+                return;
+
             MoveBehind(mytar);
 
             if (!HasRole(BOT_ROLE_DPS))
