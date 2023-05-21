@@ -621,6 +621,10 @@ public:
 
             StartAttack(mytar, IsMelee());
 
+            CheckAttackState();
+            if (!me->IsAlive())
+                return;
+
             //BLOOD TAP
             if (IsSpellReady(BLOOD_TAP_1, diff, false) && Rand() < 65)
             {

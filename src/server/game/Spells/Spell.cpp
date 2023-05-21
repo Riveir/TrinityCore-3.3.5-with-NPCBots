@@ -3899,6 +3899,10 @@ void Spell::update(uint32 difftime)
                 if (Creature* creatureCaster = m_caster->ToCreature())
                     if (creatureCaster->IsAIEnabled())
                         creatureCaster->AI()->OnChannelFinished(m_spellInfo);
+                //npcbot: signal channel finish to botmgr
+                if (m_caster->IsNPCBot())
+                    BotMgr::OnBotChannelFinish(m_caster->ToUnit(), this);
+                //end npcbot
             }
             break;
         }
