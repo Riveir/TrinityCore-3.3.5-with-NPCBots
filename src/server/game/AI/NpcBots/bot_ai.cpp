@@ -805,7 +805,7 @@ bool bot_ai::doCast(Unit* victim, uint32 spellId, TriggerCastFlags flags)
         !m_botSpellInfo->HasEffect(SPELL_EFFECT_RESURRECT_NEW) &&
         !m_botSpellInfo->HasEffect(SPELL_EFFECT_SELF_RESURRECT))
     {
-        TC_LOG_ERROR("npcbots", "bot_ai::doCast(): %s (bot class %u) tried to cast spell %u on a dead target %s",
+        TC_LOG_DEBUG("npcbots", "bot_ai::doCast(): %s (bot class %u) tried to cast spell %u on a dead target %s",
             me->GetName().c_str(), _botclass, spellId, victim->GetName().c_str());
         //return false;
     }
