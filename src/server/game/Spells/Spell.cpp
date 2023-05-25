@@ -2775,6 +2775,13 @@ SpellMissInfo Spell::PreprocessSpellHit(Unit* unit, bool scaleAura, TargetInfo& 
                     playerOwner->SetContestedPvP();
                     playerOwner->UpdatePvP(true);
                 }
+                //npcbot: bot assist case
+                else if (m_caster->IsNPCBotOrPet())
+                {
+                    if (Unit const* bot = m_caster->IsNPCBotPet() ? m_caster->ToUnit()->GetCreator() : m_caster->ToUnit())
+                        BotMgr::SetBotContestedPvP(bot->ToCreature());
+                }
+                //end npcbot
             }
 
             if (m_originalCaster && unit->IsInCombat() && m_spellInfo->HasInitialAggro())
