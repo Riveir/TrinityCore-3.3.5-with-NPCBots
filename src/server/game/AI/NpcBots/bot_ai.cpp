@@ -261,6 +261,8 @@ bot_ai::bot_ai(Creature* creature) : CreatureAI(creature)
 
     _wmoAreaUpdateTimer = 0;
 
+    _contestedPvPTimer = 0;
+
     _ownerGuid = 0;
 
     _wanderer = false;
@@ -590,6 +592,7 @@ void bot_ai::ResetBotAI(uint8 resetType)
     {
         _atHome = false;
         spawned = false;
+        ResetContestedPvP();
     }
 }
 
@@ -5255,7 +5258,7 @@ bool bot_ai::AdjustTankingPosition(Unit const* mytarget) const
 
 void bot_ai::CheckAttackState()
 {
-    if (me->GetVictim())
+    if (me->GetVictim() && me->GetVictim()->IsAlive())
     {
         if (HasRole(BOT_ROLE_DPS) && !me->HasAuraType(SPELL_AURA_MOD_STEALTH) && !me->HasAuraType(SPELL_AURA_MOD_INVISIBILITY) &&
             !IsShootingWand())
@@ -13674,14 +13677,12 @@ void bot_ai::DefaultInit()
 
     //bot needs to be either directly controlled by player of have pvp flag to be a valid assist target (buffs, heals, etc.)
     me->SetUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED);
-    if (!IsWanderer() || sWorld->IsFFAPvPRealm())
-    {
-        me->SetPvP(master->IsPvP());
-        if (sWorld->IsFFAPvPRealm())
-            me->SetByteFlag(UNIT_FIELD_BYTES_2, 1, UNIT_BYTE2_FLAG_FFA_PVP);
-        else if (IAmFree())
-            me->SetByteFlag(UNIT_FIELD_BYTES_2, 1, 0);
-    }
+
+    me->SetPvP(master->IsPvP() || IsWanderer());
+    if (sWorld->IsFFAPvPRealm())
+        me->SetByteFlag(UNIT_FIELD_BYTES_2, 1, UNIT_BYTE2_FLAG_FFA_PVP);
+    else if (IAmFree())
+        me->SetByteFlag(UNIT_FIELD_BYTES_2, 1, 0);
 
     InitSpec();
     InitRoles();
@@ -16486,6 +16487,8 @@ bool bot_ai::GlobalUpdate(uint32 diff)
 
     ReduceCD(diff);
 
+    UpdateContestedPvP();
+
     if (IsDuringTeleport())
         return false;
 
@@ -17182,6 +17185,8 @@ void bot_ai::CommonTimers(uint32 diff)
                 outdoorsTimer = 0;
         }
     }
+
+    if (_contestedPvPTimer > diff)  _contestedPvPTimer -= diff;
 
     if (_updateTimerMedium > diff)  _updateTimerMedium -= diff;
     if (_updateTimerEx1 > diff)     _updateTimerEx1 -= diff;
@@ -18795,6 +18800,42 @@ bool bot_ai::IsDamagingSpell(SpellInfo const* spellInfo)
 bool bot_ai::IsImmunedToMySpellEffect(Unit const* unit, SpellInfo const* spellInfo, SpellEffIndex index) const
 {
     return unit->IsImmunedToSpellEffect(spellInfo, spellInfo->GetEffect(index), me);
+}
+
+//CONTESTED PVP
+bool bot_ai::IsContestedPvP() const
+{
+    return me->HasUnitState(UNIT_STATE_ATTACK_PLAYER);
+}
+void bot_ai::SetContestedPvP()
+{
+    ASSERT(IAmFree());
+
+    _contestedPvPTimer = 30000;
+    if (!me->HasUnitState(UNIT_STATE_ATTACK_PLAYER))
+    {
+        me->AddUnitState(UNIT_STATE_ATTACK_PLAYER);
+        Trinity::AIRelocationNotifier notifier(*me);
+        Cell::VisitWorldObjects(me, notifier, me->GetVisibilityRange());
+    }
+    if (botPet && !botPet->HasUnitState(UNIT_STATE_ATTACK_PLAYER))
+    {
+        botPet->AddUnitState(UNIT_STATE_ATTACK_PLAYER);
+        Trinity::AIRelocationNotifier notifier(*botPet);
+        Cell::VisitWorldObjects(me, notifier, me->GetVisibilityRange());
+    }
+}
+void bot_ai::ResetContestedPvP()
+{
+    _contestedPvPTimer = 0;
+    me->ClearUnitState(UNIT_STATE_ATTACK_PLAYER);
+    if (botPet && botPet->HasUnitState(UNIT_STATE_ATTACK_PLAYER))
+        botPet->ClearUnitState(UNIT_STATE_ATTACK_PLAYER);
+}
+void bot_ai::UpdateContestedPvP()
+{
+    if (_contestedPvPTimer > 0 && _contestedPvPTimer <= lastdiff && !me->IsInCombat())
+        ResetContestedPvP();
 }
 
 //BATTLEGROUNDS
