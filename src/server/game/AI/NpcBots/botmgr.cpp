@@ -669,6 +669,16 @@ bool BotMgr::LimitBots(Map const* map)
     return false;
 }
 
+bool BotMgr::IsBotContestedPvP(Creature const* bot)
+{
+    return bot->GetBotAI()->IsContestedPvP();
+}
+
+void BotMgr::SetBotContestedPvP(Creature const* bot)
+{
+    bot->GetBotAI()->SetContestedPvP();
+}
+
 bool BotMgr::CanBotParryWhileCasting(Creature const* bot)
 {
     switch (bot->GetBotClass())
@@ -1104,6 +1114,7 @@ void BotMgr::_teleportBot(Creature* bot, Map* newMap, float x, float y, float z,
             if (reset)
                 bot->GetBotAI()->Reset();
             bot->GetBotAI()->SetIsDuringTeleport(false);
+            bot->GetBotAI()->ResetContestedPvP();
 
             if (newMap->IsBattleground())
             {
