@@ -692,7 +692,7 @@ void BotDataMgr::LoadNpcBots(bool spawn)
             //load data
             uint8 slot =            field[++index].GetUInt8();
             uint32 item_id =        field[++index].GetUInt32();
-            uint32 fake_id =        field[++index].GetUInt32();
+            int32 fake_id =         field[++index].GetInt32();
 
             _botsTransmogData[entry]->transmogs[slot] = { item_id, fake_id };
 
@@ -2145,7 +2145,7 @@ NpcBotTransmogData const* BotDataMgr::SelectNpcBotTransmogs(uint32 entry)
     NpcBotTransmogDataMap::const_iterator itr = _botsTransmogData.find(entry);
     return itr != _botsTransmogData.cend() ? itr->second : nullptr;
 }
-void BotDataMgr::UpdateNpcBotTransmogData(uint32 entry, uint8 slot, uint32 item_id, uint32 fake_id, bool update_db)
+void BotDataMgr::UpdateNpcBotTransmogData(uint32 entry, uint8 slot, uint32 item_id, int32 fake_id, bool update_db)
 {
     ASSERT(slot < BOT_TRANSMOG_INVENTORY_SIZE);
 
@@ -2162,7 +2162,7 @@ void BotDataMgr::UpdateNpcBotTransmogData(uint32 entry, uint8 slot, uint32 item_
         bstmt->setUInt32(0, entry);
         bstmt->setUInt8(1, slot);
         bstmt->setUInt32(2, item_id);
-        bstmt->setUInt32(3, fake_id);
+        bstmt->setInt32(3, fake_id);
         CharacterDatabase.Execute(bstmt);
     }
 }
@@ -2178,7 +2178,7 @@ void BotDataMgr::ResetNpcBotTransmogData(uint32 entry, bool update_db)
         CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
         for (uint8 i = 0; i != BOT_TRANSMOG_INVENTORY_SIZE; ++i)
         {
-            if (_botsTransmogData[entry]->transmogs[i].first == 0 && _botsTransmogData[entry]->transmogs[i].second == 0)
+            if (_botsTransmogData[entry]->transmogs[i].first == 0 && _botsTransmogData[entry]->transmogs[i].second == -1)
                 continue;
 
             CharacterDatabasePreparedStatement* bstmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_NPCBOT_TRANSMOG);
@@ -2186,7 +2186,7 @@ void BotDataMgr::ResetNpcBotTransmogData(uint32 entry, bool update_db)
             bstmt->setUInt32(0, entry);
             bstmt->setUInt8(1, i);
             bstmt->setUInt32(2, 0);
-            bstmt->setUInt32(3, 0);
+            bstmt->setInt32(3, -1);
             trans->Append(bstmt);
         }
 
@@ -2195,7 +2195,7 @@ void BotDataMgr::ResetNpcBotTransmogData(uint32 entry, bool update_db)
     }
 
     for (uint8 i = 0; i != BOT_TRANSMOG_INVENTORY_SIZE; ++i)
-        _botsTransmogData[entry]->transmogs[i] = { 0, 0 };
+        _botsTransmogData[entry]->transmogs[i] = { 0, -1 };
 }
 
 void BotDataMgr::RegisterBot(Creature const* bot)
