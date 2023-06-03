@@ -232,12 +232,12 @@ private:
     uint32 GetDefaultFactionForRaceClass(uint8 bot_class, uint8 bot_race) const
     {
         ChrRacesEntry const* rentry = sChrRacesStore.LookupEntry(bot_race);
-        return
-            (bot_class >= BOT_CLASS_EX_START) ? wbot_faction_for_ex_class.find(bot_class)->second : rentry ? rentry->FactionID : 14;
+        return (bot_class >= BOT_CLASS_EX_START) ? wbot_faction_for_ex_class.find(bot_class)->second : rentry ? rentry->FactionID : 14u;
     }
 
-    bool GenerateWanderingBotToSpawn(std::map<uint8, std::set<uint32>>& spareBotIdsPerClass,
-        NodeVec const& spawns_a, NodeVec const& spawns_h, NodeVec const& spawns_n, bool immediate, PvPDifficultyEntry const* bracketEntry, NpcBotRegistry* registry)
+    bool GenerateWanderingBotToSpawn(std::map<uint8, std::set<uint32>>& spareBotIdsPerClass, uint8 desired_bracket,
+        NodeVec const& spawns_a, NodeVec const& spawns_h, NodeVec const& spawns_n,
+        bool immediate, PvPDifficultyEntry const* bracketEntry, NpcBotRegistry* registry)
     {
         ASSERT(!spareBotIdsPerClass.empty());
 
@@ -270,10 +270,10 @@ private:
         }
         NodeVec level_nodes;
         level_nodes.reserve(bot_spawn_nodes->size());
-        uint8 myminlevel = BotDataMgr::GetMinLevelForBotClass(bot_class);
+        desired_bracket = std::max<uint8>(desired_bracket, BotDataMgr::GetMinLevelForBotClass(bot_class) / 10);
         for (WanderNode const* node : *bot_spawn_nodes)
         {
-            if (myminlevel <= node->GetLevels().second)
+            if (desired_bracket * 10 + 9 >= node->GetLevels().first && node->GetLevels().second >= desired_bracket * 10)
                 level_nodes.push_back(node);
         }
 
@@ -295,7 +295,11 @@ private:
             bot_template.maxlevel = std::min<uint32>(bracketEntry->MaxLevel, DEFAULT_MAX_LEVEL);
         }
         else
+        {
+            bot_template.minlevel = std::min<uint32>(std::max<uint32>(desired_bracket * 10, 1), DEFAULT_MAX_LEVEL);
+            bot_template.maxlevel = std::min<uint32>(std::min<uint32>(desired_bracket * 10 + 9, spawnLoc->GetLevels().second), DEFAULT_MAX_LEVEL);
             bot_template.flags_extra &= ~(CREATURE_FLAG_EXTRA_NO_XP);
+        }
 
         bot_template.InitializeQueryData();
 
@@ -418,6 +422,8 @@ public:
         }
 
         decltype (_spareBotIdsPerClassMap) teamSpareBotIdsPerClass;
+        BotBrackets bracketPcts{};
+        BotBrackets bots_per_bracket{};
 
         if (team == -1)
         {
@@ -426,9 +432,11 @@ public:
 
             //make a full copy
             teamSpareBotIdsPerClass = _spareBotIdsPerClassMap;
+            bracketPcts = BotMgr::GetBotWandererLevelBrackets();
         }
         else
         {
+            bracketPcts[bracketEntry->MinLevel / 10] = 100u;
             switch (team)
             {
                 case ALLIANCE:
@@ -472,12 +480,43 @@ public:
         if (teamSpareBotIdsPerClass.empty())
             return false;
 
-        for (uint32 i = 1; i <= count && !teamSpareBotIdsPerClass.empty();) // i is a counter, NOT used as index or value
+        uint32 total_bots_in_brackets = 0;
+        for (size_t k = 0; k < BracketsCount; ++k)
         {
+            if (!bracketPcts[k])
+                continue;
+            bots_per_bracket[k] = CalculatePct(count, bracketPcts[k]);
+            total_bots_in_brackets += bots_per_bracket[k];
+        }
+        for (int32 j = BracketsCount - 1; j >= 0; --j)
+        {
+            if (bots_per_bracket[j])
+            {
+                bots_per_bracket[j] += count - total_bots_in_brackets;
+                break;
+            }
+        }
+
+        std::vector<uint8> brackets_shuffled;
+        brackets_shuffled.reserve(count);
+        for (uint8 bracket = 0; bracket < BracketsCount; ++bracket)
+        {
+            while (bots_per_bracket[bracket])
+            {
+                brackets_shuffled.push_back(bracket);
+                --bots_per_bracket[bracket];
+            }
+        }
+        Trinity::Containers::RandomShuffle(brackets_shuffled);
+
+        for (size_t i = 0; i < brackets_shuffled.size() && !teamSpareBotIdsPerClass.empty();) // i is a counter, NOT used as index or value
+        {
+            uint8 bracket = brackets_shuffled[i];
+
             int8 tries = 100;
             do {
                 --tries;
-                if (GenerateWanderingBotToSpawn(teamSpareBotIdsPerClass, spawns_a, spawns_h, spawns_n, immediate, bracketEntry, registry))
+                if (GenerateWanderingBotToSpawn(teamSpareBotIdsPerClass, bracket, spawns_a, spawns_h, spawns_n, immediate, bracketEntry, registry))
                 {
                     ++i;
                     ++spawned;
