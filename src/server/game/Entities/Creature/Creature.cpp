@@ -61,6 +61,7 @@ Random(CreatureRandomMovementType::Walk), InteractionPauseTimer(sWorld->getIntCo
 
 //npcbot
 #include "bot_ai.h"
+#include "botmgr.h"
 #include "bpet_ai.h"
 //end npcbot
 
@@ -3285,6 +3286,15 @@ void Creature::SetDisplayId(uint32 modelId)
         SetBoundingRadius((IsPet() ? 1.0f : minfo->bounding_radius) * GetObjectScale());
         SetCombatReach((IsPet() ? DEFAULT_PLAYER_COMBAT_REACH : minfo->combat_reach) * GetObjectScale());
     }
+
+    //npcbot: send group update for bot pet
+    if (IsNPCBotPet())
+    {
+        if (Creature const* botPetOwner = GetBotPetAI() ? GetBotPetAI()->GetPetsOwner() : nullptr)
+            if (botPetOwner->GetBotAI()->GetGroup())
+                BotMgr::SetBotGroupUpdateFlag(botPetOwner, GROUP_UPDATE_FLAG_PET_MODEL_ID);
+    }
+    //end npcbot
 }
 
 void Creature::SetTarget(ObjectGuid guid)
