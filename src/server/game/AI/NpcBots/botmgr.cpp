@@ -1077,7 +1077,6 @@ void BotMgr::_reviveBot(Creature* bot, WorldLocation* dest)
     bot->SetLootRecipient(nullptr);
     bot->ResetPlayerDamageReq();
     bot->SetPvP(bot->GetBotOwner()->IsPvP());
-    bot->SetUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED);
     bot->Motion_Initialize();
     bot->setDeathState(ALIVE);
     //bot->GetBotAI()->Reset();
@@ -1342,7 +1341,7 @@ void BotMgr::CleanupsBeforeBotDelete(ObjectGuid guid, uint8 removetype)
 
     Creature* bot = itr->second;
 
-    ASSERT(bot->GetCreatorGUID() == _owner->GetGUID());
+    ASSERT(bot->GetCreator() && bot->GetCreator()->GetGUID() == _owner->GetGUID());
 
     RemoveBotFromBGQueue(bot);
     if (removetype != BOT_REMOVE_LOGOUT)
@@ -1365,7 +1364,7 @@ void BotMgr::CleanupsBeforeBotDelete(Creature* bot)
     bot->AttackStop();
     bot->CombatStopWithPets(true);
 
-    bot->SetOwnerGUID(ObjectGuid::Empty);
+    //bot->SetOwnerGUID(ObjectGuid::Empty);
     //_owner->m_Controlled.erase(bot);
     bot->SetControlledByPlayer(false);
     //bot->RemoveUnitFlag(UNIT_FLAG_PVP_ATTACKABLE);
@@ -1532,13 +1531,12 @@ BotAddResult BotMgr::AddBot(Creature* bot)
 
     _bots[bot->GetGUID()] = bot;
 
-    ASSERT(!bot->GetCreatorGUID());
-    ASSERT(!bot->GetOwnerGUID());
-    bot->SetOwnerGUID(_owner->GetGUID());
+    ASSERT(!bot->GetCreator());
+    //ASSERT(!bot->GetOwnerGUID());
+    //bot->SetOwnerGUID(_owner->GetGUID());
     bot->SetCreator(_owner); //needed in case of FFAPVP
     //_owner->m_Controlled.insert(bot);
     bot->SetControlledByPlayer(true);
-    bot->SetUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED);
     bot->SetByteValue(UNIT_FIELD_BYTES_2, 1, _owner->GetByteValue(UNIT_FIELD_BYTES_2, 1));
     bot->SetFaction(_owner->GetFaction());
     bot->SetPhaseMask(_owner->GetPhaseMask(), true);
