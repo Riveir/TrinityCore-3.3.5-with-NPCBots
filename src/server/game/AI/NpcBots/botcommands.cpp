@@ -1290,6 +1290,7 @@ public:
             << "\n  charmed guid:\n" << target->GetCharmedGUID().ToString()
             << "\n  charmer guid:\n" << target->GetCharmerGUID().ToString()
             << "\n  creator guid:\n" << target->GetCreatorGUID().ToString()
+            << "\n  creator2 guid:\n" << (target->GetCreator() ? target->GetCreator()->GetGUID().ToString() : std::string{})
             << "\n  owner guid:\n" << target->GetOwnerGUID().ToString();
 
         handler->SendSysMessage(gss.str().c_str());
