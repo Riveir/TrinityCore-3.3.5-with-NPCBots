@@ -2242,6 +2242,12 @@ Player* WorldObject::GetCharmerOrOwnerPlayerOrPlayerItself() const
     if (guid.IsPlayer())
         return ObjectAccessor::GetPlayer(*this, guid);
 
+    //npcbot
+    if (GetTypeId() == TYPEID_UNIT && ToCreature()->IsNPCBotOrPet())
+        if (Unit* creator = ToUnit()->GetCreator())
+            return creator->ToPlayer();
+    //end npcbot
+
     return const_cast<WorldObject*>(this)->ToPlayer();
 }
 
@@ -3097,6 +3103,13 @@ bool WorldObject::IsValidAttackTarget(WorldObject const* target, SpellInfo const
     Player const* playerAffectingAttacker = unit && unit->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) ? GetAffectingPlayer() : go ? GetAffectingPlayer() : nullptr;
     Player const* playerAffectingTarget = unitTarget && unitTarget->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) ? unitTarget->GetAffectingPlayer() : nullptr;
 
+    //npcbot: get affectingplayers for bots
+    if (!playerAffectingAttacker && unit && unit->IsNPCBotOrPet())
+        playerAffectingAttacker = unit->GetAffectingPlayer();
+    if (!playerAffectingTarget && unitTarget && unitTarget->IsNPCBotOrPet())
+        playerAffectingTarget = unitTarget->GetAffectingPlayer();
+    //end npcbot
+
     // Not all neutral creatures can be attacked (even some unfriendly faction does not react aggresive to you, like Sporaggar)
     if ((playerAffectingAttacker && !playerAffectingTarget) || (!playerAffectingAttacker && playerAffectingTarget))
     {
@@ -3131,6 +3144,13 @@ bool WorldObject::IsValidAttackTarget(WorldObject const* target, SpellInfo const
     // however, 13850 client doesn't allow to attack when one of the unit's has sanctuary flag and is pvp
     if (unitTarget && unitTarget->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) && unitOrOwner && unitOrOwner->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) && (unitTarget->IsInSanctuary() || unitOrOwner->IsInSanctuary()))
         return false;
+
+    //npcbot: BvP, PvB, BvB sanctuary case
+    if (unitTarget && (unitTarget->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) || unitTarget->IsNPCBotOrPet()) &&
+        unitOrOwner && (unitOrOwner->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) || unitOrOwner->IsNPCBotOrPet()) &&
+        (unitTarget->IsInSanctuary() || unitOrOwner->IsInSanctuary()))
+        return false;
+    //end npcbot
 
     // additional checks - only PvP case
     if (playerAffectingAttacker && playerAffectingTarget)
@@ -3218,6 +3238,13 @@ bool WorldObject::IsValidAssistTarget(WorldObject const* target, SpellInfo const
             if (unitTarget && unitTarget->IsImmuneToPC())
                 return false;
         }
+        //npcbot
+        else if (unit && unit->IsNPCBotOrPet())
+        {
+            if (unitTarget && unitTarget->IsImmuneToPC())
+                return false;
+        }
+        //end npcbot
         else
         {
             if (unitTarget && unitTarget->IsImmuneToNPC())
@@ -3261,6 +3288,20 @@ bool WorldObject::IsValidAssistTarget(WorldObject const* target, SpellInfo const
                 if (Creature const* creatureTarget = target->ToCreature())
                     return ((creatureTarget->GetCreatureTemplate()->type_flags & CREATURE_TYPE_FLAG_TREAT_AS_RAID_UNIT) || (creatureTarget->GetCreatureTemplate()->type_flags & CREATURE_TYPE_FLAG_CAN_ASSIST));
     }
+
+    //npcbot: PvP (BvB) case
+    if (unit && unit->IsNPCBotOrPet() && unitTarget && unitTarget->IsNPCBotOrPet())
+    {
+        Player const* selfPlayerOwner = GetAffectingPlayer();
+        Player const* targetPlayerOwner = unitTarget->GetAffectingPlayer();
+        if (selfPlayerOwner && targetPlayerOwner && selfPlayerOwner != targetPlayerOwner && targetPlayerOwner->duel)
+            return false;
+        if (unitTarget->IsFFAPvP() && !unit->IsFFAPvP())
+            return false;
+        if (unitTarget->IsPvP() && unit->IsInSanctuary() && !unitTarget->IsInSanctuary())
+            return false;
+    }
+    //end npcbot
 
     return true;
 }

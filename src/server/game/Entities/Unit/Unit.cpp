@@ -1589,6 +1589,9 @@ void Unit::DealMeleeDamage(CalcDamageInfo* damageInfo, bool durabilityLoss)
     if ((damageInfo->HitOutCome == MELEE_HIT_CRIT || damageInfo->HitOutCome == MELEE_HIT_CRUSHING || damageInfo->HitOutCome == MELEE_HIT_NORMAL || damageInfo->HitOutCome == MELEE_HIT_GLANCING) &&
         GetTypeId() != TYPEID_PLAYER && !ToCreature()->IsControlledByPlayer() && !victim->HasInArc(float(M_PI), this)
         && (victim->GetTypeId() == TYPEID_PLAYER || !victim->ToCreature()->isWorldBoss())&& !victim->IsVehicle())
+    //npcbot: prevent daze caused by bots
+    if (!IsNPCBotOrPet())
+    //end npcbot
     {
         // 20% base chance
         float chance = 20.0f;
@@ -5313,7 +5316,7 @@ GameObject* Unit::GetFirstGameObjectById(uint32 id) const
 
 void Unit::SetCreator(Unit* creator)
 {
-    SetCreatorGUID(creator ? creator->GetGUID() : ObjectGuid::Empty);
+    //creator is unrelated to creator guid
     m_creator = creator;
 }
 //end npcbot
@@ -5665,7 +5668,7 @@ void Unit::SetPowerType(Powers new_powertype, bool sendUpdate/* = true*/)
             if (BotMgr::GetBotGroup(ToCreature()))
                 BotMgr::SetBotGroupUpdateFlag(ToCreature(), GROUP_UPDATE_FLAG_POWER_TYPE);
         }
-        else if (GetOwnerGUID().IsCreature())
+        else
         {
             Unit const* owner = GetOwner();
             if (owner && owner->IsNPCBot() && owner->ToCreature()->GetBotsPet() == this && BotMgr::GetBotGroup(owner->ToCreature()))
@@ -6130,6 +6133,10 @@ Player* Unit::GetControllingPlayer() const
             return master->GetControllingPlayer();
         return nullptr;
     }
+    //npcbot
+    else if (IsNPCBotOrPet() && ToUnit()->GetCreator())
+        return ToUnit()->GetCreator()->ToPlayer();
+    //end npcbot
     else
         return const_cast<Player*>(ToPlayer());
 }
@@ -8691,6 +8698,14 @@ void Unit::SetImmuneToPC(bool apply, bool keepCombat)
             for (auto const& pair : m_combatManager.GetPvPCombatRefs())
                 if (pair.second->GetOther(this)->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED))
                     toEnd.push_back(pair.second);
+            //npcbot
+            for (auto const& pair : m_combatManager.GetPvECombatRefs())
+                if (pair.second->GetOther(this)->IsNPCBotOrPet())
+                    toEnd.push_back(pair.second);
+            for (auto const& pair : m_combatManager.GetPvPCombatRefs())
+                if (pair.second->GetOther(this)->IsNPCBotOrPet())
+                    toEnd.push_back(pair.second);
+            //end npcbot
             for (CombatReference* ref : toEnd)
                 ref->EndCombat();
         }
@@ -8854,9 +8869,8 @@ bool Unit::IsAlwaysVisibleFor(WorldObject const* seer) const
                     return true;
 
     //npcbot - bots are always visible for owner
-    if (Creature const* bot = ToCreature())
-        if ((bot->GetBotAI() || bot->GetBotPetAI()) && seer->GetGUID() == bot->GetBotOwner()->GetGUID())
-            return true;
+    if (GetCreator() && seer->GetGUID() == GetCreator()->GetGUID())
+        return true;
     //end npcbot
 
     return false;
@@ -9803,7 +9817,7 @@ void Unit::SetHealth(uint32 val)
             if (BotMgr::GetBotGroup(ToCreature()))
                 BotMgr::SetBotGroupUpdateFlag(ToCreature(), GROUP_UPDATE_FLAG_CUR_HP);
         }
-        else if (GetOwnerGUID().IsCreature())
+        else
         {
             Unit const* owner = GetOwner();
             if (owner && owner->IsNPCBot() && owner->ToCreature()->GetBotsPet() == this && BotMgr::GetBotGroup(owner->ToCreature()))
@@ -9844,7 +9858,7 @@ void Unit::SetMaxHealth(uint32 val)
             if (BotMgr::GetBotGroup(ToCreature()))
                 BotMgr::SetBotGroupUpdateFlag(ToCreature(), GROUP_UPDATE_FLAG_MAX_HP);
         }
-        else if (GetOwnerGUID().IsCreature())
+        else
         {
             Unit const* owner = GetOwner();
             if (owner && owner->IsNPCBot() && owner->ToCreature()->GetBotsPet() == this && BotMgr::GetBotGroup(owner->ToCreature()))
@@ -9904,7 +9918,7 @@ void Unit::SetPower(Powers power, uint32 val, bool withPowerUpdate /*= true*/)
             if (BotMgr::GetBotGroup(ToCreature()))
                 BotMgr::SetBotGroupUpdateFlag(ToCreature(), GROUP_UPDATE_FLAG_CUR_POWER);
         }
-        else if (GetOwnerGUID().IsCreature())
+        else
         {
             Unit const* owner = GetOwner();
             if (owner && owner->IsNPCBot() && owner->ToCreature()->GetBotsPet() == this && BotMgr::GetBotGroup(owner->ToCreature()))
@@ -9942,7 +9956,7 @@ void Unit::SetMaxPower(Powers power, uint32 val)
             if (BotMgr::GetBotGroup(ToCreature()))
                 BotMgr::SetBotGroupUpdateFlag(ToCreature(), GROUP_UPDATE_FLAG_MAX_POWER);
         }
-        else if (GetOwnerGUID().IsCreature())
+        else
         {
             Unit const* owner = GetOwner();
             if (owner && owner->IsNPCBot() && owner->ToCreature()->GetBotsPet() == this && BotMgr::GetBotGroup(owner->ToCreature()))
@@ -10991,6 +11005,13 @@ void Unit::SendComboPoints()
     Player* owner = nullptr;
     if (ownerGuid.IsPlayer())
         owner = ObjectAccessor::GetPlayer(*this, ownerGuid);
+    //npcbot
+    else if (IsNPCBotOrPet())
+    {
+        if (Unit* creator = ToUnit()->GetCreator())
+            owner = creator->ToPlayer();
+    }
+    //end npcbot
     if (movingMe || owner)
     {
         WorldPacket data;
@@ -11293,7 +11314,7 @@ void Unit::UpdateAuraForGroup(uint8 slot)
                 BotMgr::SetBotAuraUpdateMaskForRaid(ToCreature(), slot);
             }
         }
-        else if (GetOwnerGUID().IsCreature())
+        else
         {
             Unit const* owner = GetOwner();
             if (owner && owner->IsNPCBot() && owner->ToCreature()->GetBotsPet() == this && BotMgr::GetBotGroup(owner->ToCreature()))
@@ -11470,11 +11491,8 @@ bool Unit::InitTamedPet(Pet* pet, uint8 level, uint32 spell_id)
     // find player: owner of controlled `this` or `this` itself maybe
     Player* player = nullptr;
     //npcbot - loot recipient of bot's vehicle is owner
-    if (attacker && attacker->IsVehicle() && attacker->GetCharmerGUID().IsCreature() && attacker->GetCreatorGUID().IsPlayer())
-    {
-        if (Unit* uowner = attacker->GetCreator())
-            player = uowner->ToPlayer();
-    }
+    if (attacker && attacker->IsVehicle() && attacker->GetCharmerGUID().IsCreature() && attacker->GetCreator() && attacker->GetCreator()->IsPlayer())
+        player = attacker->GetCreator()->ToPlayer();
     else
     //end npcbot
     if (attacker)
@@ -13682,6 +13700,10 @@ bool Unit::CanSwim() const
         return false;
     if (HasUnitFlag(UNIT_FLAG_PET_IN_COMBAT))
         return true;
+    //npcbot
+    if (IsNPCBotOrPet())
+        return true;
+    //end npcbot
     return HasUnitFlag(UNIT_FLAG_RENAME | UNIT_FLAG_CAN_SWIM);
 }
 
