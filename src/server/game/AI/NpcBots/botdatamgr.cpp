@@ -303,7 +303,7 @@ private:
         }
         else
         {
-            bot_template.minlevel = std::min<uint32>(std::max<uint32>(desired_bracket * 10, 1), DEFAULT_MAX_LEVEL);
+            bot_template.minlevel = std::min<uint32>(std::max<uint32>(desired_bracket * 10, spawnLoc->GetLevels().first), DEFAULT_MAX_LEVEL);
             bot_template.maxlevel = std::min<uint32>(std::min<uint32>(desired_bracket * 10 + 9, spawnLoc->GetLevels().second), DEFAULT_MAX_LEVEL);
             bot_template.flags_extra &= ~(CREATURE_FLAG_EXTRA_NO_XP);
         }
@@ -359,11 +359,32 @@ private:
 public:
     uint32 GetEnabledBotsCount() const { return enabledBotsCount; }
 
-    uint32 GetSpareBotsCount() const
+    uint32 GetSpareBotsCount(TeamId teamId = TEAM_NEUTRAL) const
     {
         uint32 count = 0;
         for (auto const& kv : _spareBotIdsPerClassMap)
-            count += kv.second.size();
+        {
+            if (teamId == TEAM_NEUTRAL)
+                count += kv.second.size();
+            else
+            {
+                if (kv.first >= BOT_CLASS_EX_START)
+                {
+                    auto cit = wbot_faction_for_ex_class.find(kv.first);
+                    if (cit != wbot_faction_for_ex_class.cend() && cit->second == FACTION_MONSTER)
+                        continue;
+                }
+
+                for (uint32 entry : kv.second)
+                {
+                    NpcBotExtras const* extras = ASSERT_NOTNULL(BotDataMgr::SelectNpcBotExtras(entry));
+                    uint32 bot_faction = GetDefaultFactionForRaceClass(kv.first, extras->race);
+                    TeamId bot_team = BotDataMgr::GetTeamIdForFaction(bot_faction);
+                    if (teamId == bot_team)
+                        ++count;
+                }
+            }
+        }
         return count;
     }
 
@@ -983,6 +1004,7 @@ void BotDataMgr::LoadWanderMap(bool reload)
     std::map<uint32, bool> spawn_node_exists_h;
     std::map<uint32, bool> spawn_node_exists_n;
     std::unordered_map<uint32, std::pair<WanderNode*, std::vector<std::pair<std::string, std::string>>>> links_to_create;
+    uint32 disabled_nodes = 0;
     do
     {
         Field* fields = wres->Fetch();
@@ -1041,6 +1063,12 @@ void BotDataMgr::LoadWanderMap(bool reload)
             TC_LOG_WARN("server.loading", "WP %u has conflicting flags %u+%u! Removing both...",
                 id, AsUnderlyingType(BotWPFlags::BOTWP_FLAG_ALLIANCE_ONLY), AsUnderlyingType(BotWPFlags::BOTWP_FLAG_HORDE_ONLY));
             flags &= ~conflicting_flags_1;
+        }
+
+        if (mapEntry->IsContinent() && !BotMgr::IsBotGenerationEnabledWorldMapId(mapId))
+        {
+            ++disabled_nodes;
+            continue;
         }
 
         WanderNode* wp = new WanderNode(id, mapId, x, y, z, o, zoneId, areaId, name);
@@ -1135,15 +1163,17 @@ void BotDataMgr::LoadWanderMap(bool reload)
                 TC_LOG_ERROR("server.loading", "WP %u map %u has link %u ON A DIFFERENT MAP %u!", vt.first, vt.second.first->GetMapId(), lid, lwp->GetMapId());
                 continue;
             }
+
+            bool is_continent = sMapStore.LookupEntry(vt.second.first->GetMapId())->IsContinent();
             float lwpdist2d = vt.second.first->GetExactDist2d(lwp);
             if (lwpdist2d > MAX_WANDER_NODE_DISTANCE)
                 TC_LOG_WARN("server.loading", "Warning! Link distance between WP %u and %u is too great (%.2f)", vt.first, lid, lwpdist2d);
-            if (lwpdist2d < MIN_WANDER_NODE_DISTANCE && !sMapStore.LookupEntry(vt.second.first->GetMapId())->IsBattlegroundOrArena())
+            if (lwpdist2d < MIN_WANDER_NODE_DISTANCE && is_continent)
                 TC_LOG_WARN("server.loading", "Warning! Link distance between WP %u and %u is low (%.2f)", vt.first, lid, lwpdist2d);
 
             vt.second.first->Link(lwp, true);
 
-            if (sMapStore.LookupEntry(vt.second.first->GetMapId())->IsContinent())
+            if (is_continent)
             {
                 float dist2d = vt.second.first->GetExactDist2d(lwp);
                 if (dist2d < mindist)
@@ -1194,8 +1224,8 @@ void BotDataMgr::LoadWanderMap(bool reload)
         }
     });
 
-    TC_LOG_INFO("server.loading", ">> Loaded %u bot wander nodes on %u maps (total %u tops) in %u ms. Distances: min %.3f, max %.3f",
-        uint32(WanderNode::GetAllWPsCount()), uint32(WanderNode::GetWPMapsCount()), uint32(tops.size()), GetMSTimeDiffToNow(botoldMSTime), mindist, maxdist);
+    TC_LOG_INFO("server.loading", ">> Loaded %u bot wander nodes (%u disabled) on %u maps (total %u tops) in %u ms.",
+        uint32(WanderNode::GetAllWPsCount()), disabled_nodes, uint32(WanderNode::GetWPMapsCount()), uint32(tops.size()), GetMSTimeDiffToNow(botoldMSTime));
 }
 
 void BotDataMgr::GenerateWanderingBots()
@@ -1249,15 +1279,6 @@ bool BotDataMgr::GenerateBattlegroundBots(Player const* groupLeader, [[maybe_unu
     {
         TC_LOG_INFO("npcbots", "[Disabled] BG %u wandering bots generation is disabled (not implemented?)", uint32(bgTypeId));
         return true;
-    }
-
-    uint32 spareBots = sBotGen->GetSpareBotsCount();
-
-    if (spareBots == 0)
-    {
-        TC_LOG_WARN("npcbots", "[No spare bots] Failed to generate bots for BG %u inited by player %s (%u)",
-            uint32(gqinfo->BgTypeId), groupLeader->GetName().c_str(), groupLeader->GetGUID().GetCounter());
-        return false;
     }
 
     //find running BG
@@ -1316,12 +1337,24 @@ bool BotDataMgr::GenerateBattlegroundBots(Player const* groupLeader, [[maybe_unu
         return true;
     }
 
-    if (spareBots < needed_bots_count_a + needed_bots_count_h)
+    uint32 spare_bots_a = sBotGen->GetSpareBotsCount(TEAM_ALLIANCE);
+    uint32 spare_bots_h = sBotGen->GetSpareBotsCount(TEAM_HORDE);
+
+    if (queued_players_a + spare_bots_a < minteamplayers)
     {
-        TC_LOG_INFO("npcbots", "[Not enough spare bots] Failed to generate bots for BG %u inited by player %s (%u)",
+        TC_LOG_INFO("npcbots", "[Not enough A bots] Failed to generate bots for BG %u inited by player %s (%u)",
             uint32(bgTypeId), groupLeader->GetName().c_str(), groupLeader->GetGUID().GetCounter());
         return false;
     }
+    if (queued_players_h + spare_bots_h < minteamplayers)
+    {
+        TC_LOG_INFO("npcbots", "[Not enough H bots] Failed to generate bots for BG %u inited by player %s (%u)",
+            uint32(bgTypeId), groupLeader->GetName().c_str(), groupLeader->GetGUID().GetCounter());
+        return false;
+    }
+
+    needed_bots_count_a = std::min<uint32>(needed_bots_count_a, spare_bots_a);
+    needed_bots_count_h = std::min<uint32>(needed_bots_count_h, spare_bots_h);
 
     uint32 spawned_a = 0;
     uint32 spawned_h = 0;
@@ -1334,13 +1367,12 @@ bool BotDataMgr::GenerateBattlegroundBots(Player const* groupLeader, [[maybe_unu
         {
             TC_LOG_WARN("npcbots", "Failed to spawn %u ALLIANCE bots for BG %u '%s' queued A %u H %u req A %u H %u spare %u",
                 needed_bots_count_a, uint32(bg_template->GetTypeID()), bg_template->GetName().c_str(),
-                queued_players_a, queued_players_h, needed_bots_count_a, needed_bots_count_h, spareBots);
+                queued_players_a, queued_players_h, needed_bots_count_a, needed_bots_count_h, spare_bots_a);
             for (NpcBotRegistry const* registry1 : { &spawned_bots_a, &spawned_bots_h })
                 for (Creature const* bot : *registry1)
                     DespawnWandererBot(bot->GetEntry());
             return false;
         }
-        spareBots = sBotGen->GetSpareBotsCount();
     }
     if (needed_bots_count_h)
     {
@@ -1348,7 +1380,7 @@ bool BotDataMgr::GenerateBattlegroundBots(Player const* groupLeader, [[maybe_unu
         {
             TC_LOG_WARN("npcbots", "Failed to spawn %u HORDE bots for BG %u '%s' queued A %u H %u req A %u H %u spare %u",
                 needed_bots_count_h, uint32(bg_template->GetTypeID()), bg_template->GetName().c_str(),
-                queued_players_a, queued_players_h, needed_bots_count_a, needed_bots_count_h, spareBots);
+                queued_players_a, queued_players_h, needed_bots_count_a, needed_bots_count_h, spare_bots_h);
             for (NpcBotRegistry const* registry2 : { &spawned_bots_a, &spawned_bots_h })
                 for (Creature const* bot : *registry2)
                     DespawnWandererBot(bot->GetEntry());

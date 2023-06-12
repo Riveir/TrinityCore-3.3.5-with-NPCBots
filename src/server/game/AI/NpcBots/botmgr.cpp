@@ -151,6 +151,7 @@ float _mult_dmg_cryptlord;
 float _bothk_rate_honor;
 std::vector<float> _mult_dmg_levels;
 BotBrackets _botwanderer_pct_level_brackets;
+std::vector<uint32> _enabled_wander_node_maps;
 
 bool __firstload = true;
 
@@ -371,10 +372,10 @@ void BotMgr::LoadConfig(bool reload)
     _bothk_achievements_enable      = sConfigMgr->GetBoolDefault("NpcBot.HK.Achievements.Enable", false);
     _bothk_rate_honor               = sConfigMgr->GetFloatDefault("NpcBot.HK.Rate.Honor", 1.0);
 
-    std::string mult_dps_by_levels  = sConfigMgr->GetStringDefault("NpcBot.Mult.Damage.Levels", "1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0");
+    _mult_dmg_levels.clear();
+    std::string mult_dps_by_levels = sConfigMgr->GetStringDefault("NpcBot.Mult.Damage.Levels", "1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0");
     std::vector<std::string_view> toks = Trinity::Tokenize(mult_dps_by_levels, ',', false);
     ASSERT(toks.size() >= BracketsCount, "NpcBot.Mult.Damage.Levels must has at least %u values", uint32(BracketsCount));
-    _mult_dmg_levels.reserve(toks.size());
     for (decltype(toks)::size_type i = 0; i != toks.size(); ++i)
     {
         Optional<float> val = Trinity::StringTo<float>(toks[i]);
@@ -386,20 +387,46 @@ void BotMgr::LoadConfig(bool reload)
     }
 
     _botwanderer_pct_level_brackets = {};
-    std::string wanderers_by_levels  = sConfigMgr->GetStringDefault("NpcBot.WanderingBots.Continents.Levels", "20,15,15,10,10,15,15,0,0");
+    std::string wanderers_by_levels = sConfigMgr->GetStringDefault("NpcBot.WanderingBots.Continents.Levels", "20,15,15,10,10,15,15,0,0");
     std::vector<std::string_view> toks2 = Trinity::Tokenize(wanderers_by_levels, ',', false);
     ASSERT(toks2.size() >= BracketsCount, "NpcBot.WanderingBots.Continents.Levels must has at least %u values", uint32(BracketsCount));
     uint32 total_pct = 0;
-    for (decltype(toks)::size_type i = 0; i != toks2.size(); ++i)
+    for (decltype(toks2)::size_type i = 0; i != toks2.size(); ++i)
     {
         Optional<uint32> val = Trinity::StringTo<uint32>(toks2[i]);
         if (val == std::nullopt)
-            TC_LOG_ERROR("server.loading", "NpcBot.Mult.Damage.Levels contains invalid uint32 value '%s', set to default", std::string(toks[i]).c_str());
+            TC_LOG_ERROR("server.loading", "NpcBot.Mult.Damage.Levels contains invalid uint32 value '%s', set to default", std::string(toks2[i]).c_str());
         uint32 uval = val.value_or(uint32(0));
         total_pct += uval;
         _botwanderer_pct_level_brackets[i] = uval;
     }
     ASSERT(total_pct == 100u, "NpcBot.WanderingBots.Continents.Levels sum of values must be exactly 100!");
+
+    _enabled_wander_node_maps.clear();
+    std::string enabled_wander_node_maps = sConfigMgr->GetStringDefault("NpcBot.WanderingBots.Continents.Maps", "0,1,530,571");
+    std::vector<std::string_view> toks3 = Trinity::Tokenize(enabled_wander_node_maps, ',', false);
+    for (decltype(toks3)::size_type i = 0; i != toks3.size(); ++i)
+    {
+        Optional<uint32> val = Trinity::StringTo<uint32>(toks3[i]);
+        if (val == std::nullopt)
+        {
+            TC_LOG_ERROR("server.loading", "NpcBot.WanderingBots.Continents.Maps contains invalid uint32 value '%s', skipped", std::string(toks3[i]).c_str());
+            continue;
+        }
+        uint32 uval = val.value_or(uint32(0));
+        MapEntry const* mapEntry = sMapStore.LookupEntry(uval);
+        if (!mapEntry || !mapEntry->IsContinent())
+        {
+            TC_LOG_ERROR("server.loading", "NpcBot.WanderingBots.Continents.Maps contains invalid continent map id '%u', skipped", uval);
+            continue;
+        }
+        _enabled_wander_node_maps.push_back(uval);
+    }
+    if (_enabled_wander_node_maps.empty())
+    {
+        TC_LOG_ERROR("server.loading", "NpcBot.WanderingBots.Continents.Maps does not provide any valid maps! Wandering bots will not be spawned!");
+        _desiredWanderingBotsCount = 0;
+    }
 
     //limits
     RoundToInterval(_mult_dmg_physical, 0.1f, 10.f);
@@ -431,13 +458,31 @@ void BotMgr::LoadConfig(bool reload)
     RoundToInterval(_mult_dmg_cryptlord, 0.1f, 10.f);
     RoundToInterval(_bothk_rate_honor, 0.1f, 10.f);
 
-    //exclusions
+    //conflicts
     uint8 dpsFlags = /*_tankingTargetIconFlags | _offTankingTargetIconFlags | */_dpsTargetIconFlags | _rangedDpsTargetIconFlags;
     if (uint8 interFlags = (_noDpsTargetIconFlags & dpsFlags))
     {
         _noDpsTargetIconFlags &= ~interFlags;
-        TC_LOG_ERROR("scripts", "BotMgr::LoadConfig: NoDPSTargetIconMask intersects with dps targets flags 0x%02X! Removed, new mask: 0x%02X",
+        TC_LOG_ERROR("server.loading", "BotMgr::LoadConfig: NoDPSTargetIconMask intersects with dps targets flags 0x%02X! Removed, new mask: 0x%02X",
             uint32(interFlags), uint32(_noDpsTargetIconFlags));
+    }
+
+    if (!_enabled_wander_node_maps.empty())
+    {
+        uint8 maxbotlevel = 0;
+        for (uint32 mapid : _enabled_wander_node_maps)
+            maxbotlevel = std::max<uint8>(maxbotlevel, BotDataMgr::GetMaxLevelForMapId(mapid));
+        for (uint8 i = maxbotlevel / 10 + 1; i < _botwanderer_pct_level_brackets.size(); ++i)
+        {
+            if (_botwanderer_pct_level_brackets[i] > 0)
+            {
+                uint32 pct = _botwanderer_pct_level_brackets[i];
+                _botwanderer_pct_level_brackets[0] += pct;
+                _botwanderer_pct_level_brackets[i] = 0;
+                TC_LOG_WARN("server.loading", "NpcBot.WanderingBots.Continents.Levels conflicts with NpcBot.WanderingBots.Continents.Maps: no map for levels %u-%u! Transferring extra %u%% to levels %u-%u",
+                    uint32((i ? i * 10 : 1)), uint32(i * 10 + 9), pct, uint32(1), uint32(9));
+            }
+        }
     }
 }
 
@@ -637,6 +682,10 @@ bool BotMgr::FilterRaces()
 bool BotMgr::IsBotGenerationEnabledBGs()
 {
     return _enableWanderingBotsBG;
+}
+bool BotMgr::IsBotGenerationEnabledWorldMapId(uint32 mapId)
+{
+    return std::find(std::cbegin(_enabled_wander_node_maps), std::cend(_enabled_wander_node_maps), mapId) != std::cend(_enabled_wander_node_maps);
 }
 bool BotMgr::IsBotHKEnabled()
 {
