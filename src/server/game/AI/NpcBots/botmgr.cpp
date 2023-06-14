@@ -254,8 +254,13 @@ void BotMgr::Initialize()
     LoadConfig();
 
     BotDataMgr::LoadNpcBots();
+    BotDataMgr::LoadWanderMap();
+    BotDataMgr::GenerateWanderingBots();
+    BotDataMgr::CreateWanderingBotsSortedGear();
     BotDataMgr::LoadNpcBotGroupData();
     BotDataMgr::LoadNpcBotGearStorage();
+
+    ResolveConfigConflicts();
 }
 
 void BotMgr::ReloadConfig()
@@ -375,7 +380,7 @@ void BotMgr::LoadConfig(bool reload)
     _mult_dmg_levels.clear();
     std::string mult_dps_by_levels = sConfigMgr->GetStringDefault("NpcBot.Mult.Damage.Levels", "1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0");
     std::vector<std::string_view> toks = Trinity::Tokenize(mult_dps_by_levels, ',', false);
-    ASSERT(toks.size() >= BracketsCount, "NpcBot.Mult.Damage.Levels must has at least %u values", uint32(BracketsCount));
+    ASSERT(toks.size() >= BracketsCount, "NpcBot.Mult.Damage.Levels must have at least %u values", uint32(BracketsCount));
     for (decltype(toks)::size_type i = 0; i != toks.size(); ++i)
     {
         Optional<float> val = Trinity::StringTo<float>(toks[i]);
@@ -389,7 +394,7 @@ void BotMgr::LoadConfig(bool reload)
     _botwanderer_pct_level_brackets = {};
     std::string wanderers_by_levels = sConfigMgr->GetStringDefault("NpcBot.WanderingBots.Continents.Levels", "20,15,15,10,10,15,15,0,0");
     std::vector<std::string_view> toks2 = Trinity::Tokenize(wanderers_by_levels, ',', false);
-    ASSERT(toks2.size() >= BracketsCount, "NpcBot.WanderingBots.Continents.Levels must has at least %u values", uint32(BracketsCount));
+    ASSERT(toks2.size() >= BracketsCount, "NpcBot.WanderingBots.Continents.Levels must have at least %u values", uint32(BracketsCount));
     uint32 total_pct = 0;
     for (decltype(toks2)::size_type i = 0; i != toks2.size(); ++i)
     {
@@ -457,8 +462,10 @@ void BotMgr::LoadConfig(bool reload)
     RoundToInterval(_mult_dmg_seawitch, 0.1f, 10.f);
     RoundToInterval(_mult_dmg_cryptlord, 0.1f, 10.f);
     RoundToInterval(_bothk_rate_honor, 0.1f, 10.f);
+}
 
-    //conflicts
+void BotMgr::ResolveConfigConflicts()
+{
     uint8 dpsFlags = /*_tankingTargetIconFlags | _offTankingTargetIconFlags | */_dpsTargetIconFlags | _rangedDpsTargetIconFlags;
     if (uint8 interFlags = (_noDpsTargetIconFlags & dpsFlags))
     {
@@ -477,10 +484,10 @@ void BotMgr::LoadConfig(bool reload)
             if (_botwanderer_pct_level_brackets[i] > 0)
             {
                 uint32 pct = _botwanderer_pct_level_brackets[i];
-                _botwanderer_pct_level_brackets[0] += pct;
+                _botwanderer_pct_level_brackets[maxbotlevel / 10] += pct;
                 _botwanderer_pct_level_brackets[i] = 0;
                 TC_LOG_WARN("server.loading", "NpcBot.WanderingBots.Continents.Levels conflicts with NpcBot.WanderingBots.Continents.Maps: no map for levels %u-%u! Transferring extra %u%% to levels %u-%u",
-                    uint32((i ? i * 10 : 1)), uint32(i * 10 + 9), pct, uint32(1), uint32(9));
+                    uint32((i ? i * 10 : 1)), uint32(i * 10 + 9), pct, std::max<uint32>(maxbotlevel, 1), uint32(maxbotlevel + 9));
             }
         }
     }
