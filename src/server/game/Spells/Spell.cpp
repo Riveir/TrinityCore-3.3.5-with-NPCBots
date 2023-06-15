@@ -2774,18 +2774,32 @@ SpellMissInfo Spell::PreprocessSpellHit(Unit* unit, bool scaleAura, TargetInfo& 
             // assisting case, healing and resurrection
             if (unit->HasUnitState(UNIT_STATE_ATTACK_PLAYER))
             {
+                //npcbot: bot assist case
+                if (m_caster->IsNPCBotOrPet() && (unit->IsNPCBotOrPet() || unit->IsPlayer()))
+                {
+                    if (m_caster->ToCreature()->IsFreeBot())
+                    {
+                        Unit const* bot = m_caster->IsNPCBotPet() ? m_caster->ToUnit()->GetCreator() : m_caster->ToUnit();
+                        if (bot && bot->IsNPCBot())
+                            BotMgr::SetBotContestedPvP(bot->ToCreature());
+                    }
+                    else
+                    {
+                        if (Player const* pOwner = m_caster->ToUnit()->GetCreator() ? m_caster->ToUnit()->GetCreator()->ToPlayer() : nullptr)
+                        {
+                            Unit* bot = m_caster->IsNPCBotPet() ? static_cast<Unit*>(pOwner->GetBotMgr()->GetBot(m_caster->GetOwnerGUID())) : m_caster->ToUnit();
+                            if (bot && bot->IsNPCBot())
+                                BotMgr::SetBotContestedPvP(bot->ToCreature());
+                        }
+                    }
+                }
+                else
+                //end npcbot
                 if (Player* playerOwner = m_caster->GetCharmerOrOwnerPlayerOrPlayerItself())
                 {
                     playerOwner->SetContestedPvP();
                     playerOwner->UpdatePvP(true);
                 }
-                //npcbot: bot assist case
-                else if (m_caster->IsNPCBotOrPet())
-                {
-                    if (Unit const* bot = m_caster->IsNPCBotPet() ? m_caster->ToUnit()->GetCreator() : m_caster->ToUnit())
-                        BotMgr::SetBotContestedPvP(bot->ToCreature());
-                }
-                //end npcbot
             }
 
             if (m_originalCaster && unit->IsInCombat() && m_spellInfo->HasInitialAggro())

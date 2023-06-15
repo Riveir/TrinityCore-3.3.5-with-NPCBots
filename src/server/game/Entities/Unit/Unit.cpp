@@ -9175,20 +9175,42 @@ void Unit::AtTargetAttacked(Unit* target, bool canInitialAggro)
         myPlayerOwner->UpdatePvP(true);
         myPlayerOwner->SetContestedPvP(targetPlayerOwner);
         myPlayerOwner->RemoveAurasWithInterruptFlags(AURA_INTERRUPT_FLAG_ENTER_PVP_COMBAT);
+
+        //npcbot: init contested PvP for owned bots
+        if (IsNPCBotOrPet() && target->IsNPCBotOrPet())
+        {
+            if (Unit* bot = IsNPCBotPet() ? static_cast<Unit*>(myPlayerOwner->GetBotMgr()->GetBot(GetOwnerGUID())) : this)
+            {
+                BotMgr::SetBotContestedPvP(bot->ToCreature());
+                bot->RemoveAurasWithInterruptFlags(AURA_INTERRUPT_FLAG_ENTER_PVP_COMBAT);
+            }
+        }
+        //end npcbot
     }
     //npcbot: init contested PvP for free bots
-    else if (myPlayerOwner && !targetPlayerOwner && target->IsNPCBotOrPet())
-    {
-        myPlayerOwner->UpdatePvP(true);
-        myPlayerOwner->SetContestedPvP();
-        myPlayerOwner->RemoveAurasWithInterruptFlags(AURA_INTERRUPT_FLAG_ENTER_PVP_COMBAT);
-    }
-    else if (!myPlayerOwner && targetPlayerOwner && IsNPCBotOrPet())
+    else if (!myPlayerOwner && IsNPCBotOrPet() && (target->IsNPCBotOrPet() || targetPlayerOwner))
     {
         if (Unit* bot = IsNPCBotPet() ? GetCreator() : this)
         {
             BotMgr::SetBotContestedPvP(bot->ToCreature());
             bot->RemoveAurasWithInterruptFlags(AURA_INTERRUPT_FLAG_ENTER_PVP_COMBAT);
+        }
+    }
+    else if (myPlayerOwner && !targetPlayerOwner && target->IsNPCBotOrPet() && (IsPlayer() || IsNPCBotOrPet()))
+    {
+        if (IsPlayer())
+        {
+            myPlayerOwner->UpdatePvP(true);
+            myPlayerOwner->SetContestedPvP();
+            myPlayerOwner->RemoveAurasWithInterruptFlags(AURA_INTERRUPT_FLAG_ENTER_PVP_COMBAT);
+        }
+        else // if (IsNPCBotOrPet())
+        {
+            if (Unit* bot = IsNPCBotPet() ? static_cast<Unit*>(myPlayerOwner->GetBotMgr()->GetBot(GetOwnerGUID())) : this)
+            {
+                BotMgr::SetBotContestedPvP(bot->ToCreature());
+                bot->RemoveAurasWithInterruptFlags(AURA_INTERRUPT_FLAG_ENTER_PVP_COMBAT);
+            }
         }
     }
     //end npcbot
