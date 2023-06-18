@@ -3023,6 +3023,9 @@ bool WorldObject::IsValidAttackTarget(WorldObject const* target, SpellInfo const
         unitOrOwner = go->GetOwner();
 
     // ignore immunity flags when assisting
+    //npcbot: rewrite all that
+    /*
+    //end npcbot
     if (unitOrOwner && unitTarget && !(isPositiveSpell && bySpell->HasAttribute(SPELL_ATTR6_ASSIST_IGNORE_IMMUNE_FLAG)))
     {
         if (!unitOrOwner->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) && unitTarget->IsImmuneToNPC())
@@ -3037,6 +3040,23 @@ bool WorldObject::IsValidAttackTarget(WorldObject const* target, SpellInfo const
         if (unitTarget->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) && unitOrOwner->IsImmuneToPC())
             return false;
     }
+    //npcbot
+    */
+    if (unitOrOwner && unitTarget && !(isPositiveSpell && bySpell->HasAttribute(SPELL_ATTR6_ASSIST_IGNORE_IMMUNE_FLAG)))
+    {
+        if (!unitOrOwner->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) && !unitOrOwner->IsNPCBotOrPet() && unitTarget->IsImmuneToNPC())
+            return false;
+
+        if (!unitTarget->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) && !unitTarget->IsNPCBotOrPet() && unitOrOwner->IsImmuneToNPC())
+            return false;
+
+        if ((unitOrOwner->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) || unitOrOwner->IsNPCBotOrPet()) && unitTarget->IsImmuneToPC())
+            return false;
+
+        if ((unitTarget->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) || unitTarget->IsNPCBotOrPet()) && unitOrOwner->IsImmuneToPC())
+            return false;
+    }
+    //end npcbot
 
     //npcbot: CvB, BvC case
     if (unit && unitTarget &&
