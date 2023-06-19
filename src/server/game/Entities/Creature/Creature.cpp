@@ -1993,9 +1993,18 @@ bool Creature::CanStartAttack(Unit const* who, bool force) const
         return false;
 
     // This set of checks is should be done only for creatures
+    //npcbot
+    /*
+    //end npcbot
     if ((IsImmuneToNPC() && !who->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED))
         || (IsImmuneToPC() && who->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED)))
         return false;
+    //npcbot
+    */
+    if ((IsImmuneToNPC() && !(who->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) || who->IsNPCBotOrPet())) ||
+        (IsImmuneToPC() && (who->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) || who->IsNPCBotOrPet())))
+        return false;
+    //end npcbot
 
     // Do not attack non-combat pets
     if (who->GetTypeId() == TYPEID_UNIT && who->GetCreatureType() == CREATURE_TYPE_NON_COMBAT_PET)
