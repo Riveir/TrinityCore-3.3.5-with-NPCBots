@@ -8720,6 +8720,9 @@ void Unit::SetImmuneToNPC(bool apply, bool keepCombat)
             for (auto const& pair : m_combatManager.GetPvPCombatRefs())
                 if (!pair.second->GetOther(this)->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED))
                     toEnd.push_back(pair.second);
+            //npcbot
+            toEnd.remove_if([this](CombatReference const* cref) { return cref->GetOther(this)->IsNPCBotOrPet(); });
+            //end npcbot
             for (CombatReference* ref : toEnd)
                 ref->EndCombat();
         }
