@@ -15224,8 +15224,9 @@ void bot_ai::KilledUnit(Unit* u)
     {
         Battleground* bg = GetBG();
         //could be removed from BG
-        if (bg && bg->GetPlayers().find(me->GetGUID()) != bg->GetPlayers().end() &&
-            bg->GetPlayers().find(u->GetGUID()) != bg->GetPlayers().end())
+        if (bg && bg->GetBots().find(me->GetGUID()) != bg->GetBots().end() &&
+            (u->IsNPCBot() ? bg->GetBots().find(u->GetGUID()) != bg->GetBots().end() :
+            bg->GetPlayers().find(u->GetGUID()) != bg->GetPlayers().end()))
         {
             if (u->IsPlayer())
                 bg->HandleBotKillPlayer(me, u->ToPlayer());
@@ -16668,7 +16669,7 @@ bool bot_ai::GlobalUpdate(uint32 diff)
             if (bg->GetStatus() == STATUS_WAIT_LEAVE)
             {
                 if (std::find_if(bg->GetPlayers().cbegin(), bg->GetPlayers().cend(), [](auto const& kv) { return kv.first.IsPlayer(); }) == bg->GetPlayers().cend())
-                    bg->RemovePlayerAtLeave(me->GetGUID(), false, false);
+                    bg->RemoveBotAtLeave(me->GetGUID());
                 return false;
             }
         }
@@ -17864,9 +17865,9 @@ void bot_ai::OnWanderNodeReached()
             switch (bg->GetTypeID())
             {
                 case BATTLEGROUND_WS:
-                    if (bg->GetPlayerTeamId(me->GetGUID()) == TEAM_ALLIANCE && _travel_node_cur->HasFlag(BotWPFlags::BOTWP_FLAG_ALLIANCE_ONLY))
+                    if (bg->GetBotTeamId(me->GetGUID()) == TEAM_ALLIANCE && _travel_node_cur->HasFlag(BotWPFlags::BOTWP_FLAG_ALLIANCE_ONLY))
                         bg->HandleBotAreaTrigger(me, 3646);
-                    if (bg->GetPlayerTeamId(me->GetGUID()) == TEAM_HORDE && _travel_node_cur->HasFlag(BotWPFlags::BOTWP_FLAG_HORDE_ONLY))
+                    if (bg->GetBotTeamId(me->GetGUID()) == TEAM_HORDE && _travel_node_cur->HasFlag(BotWPFlags::BOTWP_FLAG_HORDE_ONLY))
                         bg->HandleBotAreaTrigger(me, 3647);
                     break;
                 default:
@@ -17879,7 +17880,7 @@ void bot_ai::OnWanderNodeReached()
             {
                 case BATTLEGROUND_WS:
                 {
-                    if (bg->GetPlayerTeamId(me->GetGUID()) == TEAM_ALLIANCE && _travel_node_cur->HasFlag(BotWPFlags::BOTWP_FLAG_HORDE_ONLY))
+                    if (bg->GetBotTeamId(me->GetGUID()) == TEAM_ALLIANCE && _travel_node_cur->HasFlag(BotWPFlags::BOTWP_FLAG_HORDE_ONLY))
                     {
                         if (GameObject* go = bg->GetBGObject(BG_WS_OBJECT_H_FLAG, true))
                         {
@@ -17889,7 +17890,7 @@ void bot_ai::OnWanderNodeReached()
                             bg->EventBotClickedOnFlag(me, go);
                         }
                     }
-                    if (bg->GetPlayerTeamId(me->GetGUID()) == TEAM_HORDE && _travel_node_cur->HasFlag(BotWPFlags::BOTWP_FLAG_ALLIANCE_ONLY))
+                    if (bg->GetBotTeamId(me->GetGUID()) == TEAM_HORDE && _travel_node_cur->HasFlag(BotWPFlags::BOTWP_FLAG_ALLIANCE_ONLY))
                     {
                         if (GameObject* go = bg->GetBGObject(BG_WS_OBJECT_A_FLAG, true))
                         {
@@ -17914,7 +17915,7 @@ void bot_ai::OnWanderNodeReached()
                     }
                     if (node < BG_AB_DYNAMIC_NODES_COUNT)
                     {
-                        TeamId teamId = bg->GetPlayerTeamId(me->GetGUID());
+                        TeamId teamId = bg->GetBotTeamId(me->GetGUID());
                         BattlegroundAB const* bgab = dynamic_cast<BattlegroundAB const*>(bg);
 
                         if (bgab->IsNodeOccupied(node, teamId) || bgab->IsNodeContested(node, teamId))
