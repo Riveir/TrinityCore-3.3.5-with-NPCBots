@@ -97,7 +97,7 @@ public:
                 Battleground* bg = ASSERT_NOTNULL(bgPlayer->GetBattleground());
 
                 //full, some players connected
-                if (!bg->HasFreeSlots())
+                if (bg->GetPlayersCountByTeam(ALLIANCE) + bg->GetPlayersCountByTeam(HORDE) >= bg->GetMaxPlayersPerTeam() * 2)
                 {
                     AbortMe();
                     return true;
