@@ -3642,7 +3642,7 @@ void Spell::EffectSummonObjectWild()
     if (m_caster->IsNPCBot() && pGameObj->GetGoType() == GAMEOBJECT_TYPE_FLAGDROP)
     {
         if (Battleground* bg = m_caster->ToCreature()->GetBotBG())
-            bg->SetDroppedFlagGUID(pGameObj->GetGUID(), bg->GetOtherTeamId(bg->GetPlayerTeamId(m_caster->GetGUID())));
+            bg->SetDroppedFlagGUID(pGameObj->GetGUID(), bg->GetOtherTeamId(bg->GetBotTeamId(m_caster->GetGUID())));
     }
     //end npcbot
 
