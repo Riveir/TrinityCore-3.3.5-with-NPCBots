@@ -2775,10 +2775,20 @@ ReputationRank WorldObject::GetReactionTo(WorldObject const* target) const
 
     Unit const* unit = Coalesce<const Unit>(ToUnit(), selfPlayerOwner);
     Unit const* targetUnit = Coalesce<const Unit>(target->ToUnit(), targetPlayerOwner);
+    //npcbot
+    /*
     if (unit && unit->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED))
     {
         if (targetUnit && targetUnit->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED))
         {
+    */
+    if (unit && (unit->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) || unit->IsNPCBotOrPet()))
+    {
+        if (targetUnit && (targetUnit->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) || targetUnit->IsNPCBotOrPet()))
+        {
+            if (unit->IsInRaidWith(targetUnit))
+                return REP_FRIENDLY;
+    //end npcbot
             if (selfPlayerOwner && targetPlayerOwner)
             {
                 // always friendly to other unit controlled by player, or to the player himself

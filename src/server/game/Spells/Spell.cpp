@@ -3387,7 +3387,7 @@ void Spell::_cast(bool skipCheck)
             SendInterrupted(0);
 
             //npcbot - hook for spellcast finish (unsuccessful)
-            if (m_caster->GetTypeId() == TYPEID_UNIT && m_caster->ToCreature()->IsNPCBotOrPet())
+            if (m_caster->IsNPCBotOrPet())
                 BotMgr::OnBotSpellGo(m_caster->ToCreature(), this, false);
             //end npcbot
 
@@ -3971,6 +3971,11 @@ void Spell::finish(bool ok)
 
     if (Creature* creatureCaster = unitCaster->ToCreature())
         creatureCaster->ReleaseSpellFocus(this);
+
+    //npcbot
+    if (!ok && unitCaster->IsNPCBotOrPet())
+        BotMgr::OnBotSpellGo(unitCaster, this, false);
+    //end npcbot
 
     if (!ok)
         return;
