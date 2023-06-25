@@ -453,6 +453,7 @@ class TC_GAME_API Battleground
         virtual void HandleBotKillPlayer(Creature* killer, Player* victim);
         virtual void HandleBotKillBot(Creature* killer, Creature* victim);
         virtual void HandlePlayerKillBot(Creature* victim, Player* killer);
+        virtual void HandleBotKillUnit(Creature* /*killer*/, Creature* /*victim*/) { }
         virtual void EventBotDroppedFlag(Creature* /*bot*/) { }
         virtual void EventBotClickedOnFlag(Creature* /*bot*/, GameObject* /*target_obj*/) { }
         virtual void HandleBotAreaTrigger(Creature* /*bot*/, uint32 /*trigger*/) { }
