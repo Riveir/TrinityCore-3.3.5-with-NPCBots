@@ -387,7 +387,7 @@ inline void Battleground::_ProcessResurrect(uint32 diff)
             if (itr->IsCreature())
             {
                 if (Creature const* cbot = BotDataMgr::FindBot(itr->GetEntry()))
-                    BotMgr::ReviveBot(const_cast<Creature*>(cbot));
+                    cbot->GetBotAI()->UpdateReviveTimer(std::numeric_limits<uint32>::max());
                 continue;
             }
             //end npcbot
@@ -714,6 +714,12 @@ void Battleground::CastSpellOnTeam(uint32 SpellID, uint32 TeamID)
     for (BattlegroundPlayerMap::const_iterator itr = m_Players.begin(); itr != m_Players.end(); ++itr)
         if (Player* player = _GetPlayerForTeam(TeamID, itr, "CastSpellOnTeam"))
             player->CastSpell(player, SpellID, true);
+    //npcbot
+    for (auto const& kv : m_Bots)
+        if (kv.second.Team == TeamID)
+            if (Creature* bot = GetBgMap()->GetCreature(kv.first))
+                bot->CastSpell(bot, SpellID, true);
+    //end npcbot
 }
 
 void Battleground::RemoveAuraOnTeam(uint32 SpellID, uint32 TeamID)
@@ -1593,8 +1599,25 @@ void Battleground::RelocateDeadPlayers(ObjectGuid guideGuid)
     if (!ghostList.empty())
     {
         WorldSafeLocsEntry const* closestGrave = nullptr;
+        //npcbot
+        WorldSafeLocsEntry const* closestBotGrave = nullptr;
+        //end npcbot
         for (GuidVector::const_iterator itr = ghostList.begin(); itr != ghostList.end(); ++itr)
         {
+            //npcbot
+            if (itr->IsCreature())
+            {
+                if (Creature const* bot = BotDataMgr::FindBot(itr->GetEntry()))
+                {
+                    if (!closestBotGrave)
+                        closestBotGrave = GetClosestGraveyardForBot(*bot, GetBotTeam(*itr));
+                    if (closestBotGrave)
+                        const_cast<Creature*>(bot)->NearTeleportTo(Position(closestBotGrave->Loc.X, closestBotGrave->Loc.Y, closestBotGrave->Loc.Z));
+                }
+                continue;
+            }
+            //end npcbot
+
             Player* player = ObjectAccessor::FindPlayer(*itr);
             if (!player)
                 continue;
