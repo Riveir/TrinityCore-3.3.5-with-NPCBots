@@ -16,6 +16,8 @@
 #include "MapManager.h"
 #include "ObjectMgr.h"
 #include "ScriptMgr.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "StringConvert.h"
 #include "WorldDatabase.h"
 /*
@@ -55,7 +57,8 @@ static bool allBotsLoaded = false;
 
 static uint32 next_wandering_bot_spawn_delay = 0;
 
-static EventProcessor botDataEvents;
+static EventProcessor botSpawnEvents;
+static std::unordered_map<ObjectGuid, EventProcessor> botBGJoinEvents;
 
 bool BotBankItemCompare::operator()(Item const* item1, Item const* item2) const
 {
@@ -82,6 +85,13 @@ public:
         BotDataMgr::DespawnWandererBot(_botGUID.GetEntry());
     }
 
+    void AbortAll()
+    {
+        TC_LOG_ERROR("npcbots", "BotBattlegroundEnterEvent: Aborting ALL bots by %u bg %u!", _playerGUID.GetCounter(), uint32(_bgQueueTypeId));
+        AbortMe();
+        botBGJoinEvents.at(_playerGUID).KillAllEvents(false);
+    }
+
     bool Execute(uint64 e_time, uint32 /*p_time*/) override
     {
         if (e_time >= _removeTime)
@@ -99,7 +109,7 @@ public:
                 //full, some players connected
                 if (bg->GetPlayersCountByTeam(ALLIANCE) + bg->GetPlayersCountByTeam(HORDE) >= bg->GetMaxPlayersPerTeam() * 2)
                 {
-                    AbortMe();
+                    AbortAll();
                     return true;
                 }
 
@@ -118,10 +128,10 @@ public:
                 TeamId teamId = BotDataMgr::GetTeamIdForFaction(bot->GetFaction());
                 BotMgr::TeleportBot(const_cast<Creature*>(bot), bgPlayer->GetMap(), bg->GetTeamStartPosition(teamId), true, false);
             }
-            else if (bgPlayer && bgPlayer->InBattlegroundQueue())
-                botDataEvents.AddEventAtOffset(new BotBattlegroundEnterEvent(_playerGUID, _botGUID, _bgQueueTypeId, _removeTime), 2s);
+            else if (bgPlayer && bgPlayer->InBattlegroundQueue() && bgPlayer->GetBattlegroundQueueIndex(_bgQueueTypeId) < PLAYER_MAX_BATTLEGROUND_QUEUES)
+                botBGJoinEvents.at(_playerGUID).AddEventAtOffset(new BotBattlegroundEnterEvent(_playerGUID, _botGUID, _bgQueueTypeId, _removeTime), 2s);
             else
-                AbortMe();
+                AbortAll();
         }
 
         return true;
@@ -568,7 +578,9 @@ public:
 
 void BotDataMgr::Update(uint32 diff)
 {
-    botDataEvents.Update(diff);
+    botSpawnEvents.Update(diff);
+    for (auto& kv : botBGJoinEvents)
+        kv.second.Update(diff);
 
     if (!_botsWanderCreaturesToDespawn.empty())
     {
@@ -1258,23 +1270,22 @@ void BotDataMgr::LoadWanderMap(bool reload)
         {
             TC_LOG_DEBUG("server.loading", "Node %u ('%s') has single connection!", wp->GetWPId(), wp->GetName().c_str());
             WanderNode const* tn = wp->GetLinks().front();
+            WanderNode const* prev = nullptr;
             std::vector<WanderNode const*> sc_chain;
             sc_chain.push_back(wp);
             tops.emplace(wp);
             while (tn != wp)
             {
-                if (tn->GetLinks().size() != 2u)
+                if (tn->GetLinks().size() != 2u || !tn->HasLink(prev ? prev : wp))
                 {
                     sc_chain.push_back(tn);
                     break;
                 }
-                uint32 prevId = sc_chain.back()->GetWPId();
+                prev = sc_chain.back();
                 sc_chain.push_back(tn);
-                tn = *std::find_if_not(std::cbegin(tn->GetLinks()), std::cend(tn->GetLinks()), [nId = prevId](WanderNode const* lwp) {
-                    return lwp->GetWPId() == nId;
-                });
+                tn = *std::find_if_not(std::cbegin(tn->GetLinks()), std::cend(tn->GetLinks()), [=](WanderNode const* lwp) { return lwp == prev; });
             }
-            if (sc_chain.back()->GetLinks().size() == 1u)
+            if (sc_chain.back()->GetLinks().size() == 1u && prev && sc_chain.back()->GetLinks().front() == prev)
             {
                 TC_LOG_DEBUG("server.loading", "Node %u ('%s') has single connection!", tn->GetWPId(), tn->GetName().c_str());
                 tops.emplace(sc_chain.back());
@@ -1456,14 +1467,13 @@ bool BotDataMgr::GenerateBattlegroundBots(Player const* groupLeader, [[maybe_unu
     ASSERT(uint32(spawned_bots_a.size()) == needed_bots_count_a);
     ASSERT(uint32(spawned_bots_h.size()) == needed_bots_count_h);
 
-    uint32 seconds_delay = 5;
-
-    botDataEvents.AddEventAtOffset([ammr = ammr, atype = atype, bgqTypeId = bgqTypeId, bgTypeId = bgTypeId, bracketId = bracketId]() {
+    botBGJoinEvents[groupLeader->GetGUID()].AddEventAtOffset([ammr = ammr, atype = atype, bgqTypeId = bgqTypeId, bgTypeId = bgTypeId, bracketId = bracketId]() {
         sBattlegroundMgr->ScheduleQueueUpdate(ammr, atype, bgqTypeId, bgTypeId, bracketId);
     }, Seconds(2));
 
     for (NpcBotRegistry const* registry3 : { &spawned_bots_a, &spawned_bots_h })
     {
+        uint32 seconds_delay = 5;
         for (Creature const* bot : *registry3)
         {
             bot->GetBotAI()->SetBotCommandState(BOT_COMMAND_STAY);
@@ -1473,11 +1483,11 @@ bool BotDataMgr::GenerateBattlegroundBots(Player const* groupLeader, [[maybe_unu
             queue->AddBotAsGroup(bot->GetGUID(), GetTeamIdForFaction(bot->GetFaction()) == TEAM_HORDE ? HORDE : ALLIANCE,
                 bgTypeId, bracketEntry, atype, false, gqinfo->ArenaTeamRating, ammr);
 
-            seconds_delay += std::max<uint32>(1u, uint32((MINUTE / 2) / (needed_bots_count_a + needed_bots_count_h)));
+            seconds_delay += std::max<uint32>(1u, uint32((MINUTE / 2) / std::min<uint32>(needed_bots_count_a, needed_bots_count_h)));
 
             BotBattlegroundEnterEvent* bbe = new BotBattlegroundEnterEvent(groupLeader->GetGUID(), bot->GetGUID(), bgqTypeId,
-                botDataEvents.CalculateTime(Milliseconds(uint32(INVITE_ACCEPT_WAIT_TIME) + uint32(BG_START_DELAY_2M))).count());
-            botDataEvents.AddEventAtOffset(bbe, Seconds(seconds_delay));
+                botBGJoinEvents[groupLeader->GetGUID()].CalculateTime(Milliseconds(uint32(INVITE_ACCEPT_WAIT_TIME) + uint32(BG_START_DELAY_2M))).count());
+            botBGJoinEvents[groupLeader->GetGUID()].AddEventAtOffset(bbe, Seconds(seconds_delay));
         }
     }
 
@@ -1529,7 +1539,7 @@ void BotDataMgr::CreateWanderingBotsSortedGear()
             if (c == BOT_CLASS_SPHYNX &&
                 (itt.InventoryType == INVTYPE_FINGER || itt.InventoryType == INVTYPE_TRINKET || itt.InventoryType == INVTYPE_CLOAK || itt.InventoryType == INVTYPE_NECK || itt.InventoryType == INVTYPE_SHIELD))
                 continue;
-            if (!itt.AllowableClass || !!(itt.AllowableClass & ((1u << MAX_CLASSES) - 1)) || !!(itt.AllowableClass & (1 << (c - 1))))
+            if (!itt.AllowableClass || itt.AllowableClass >= ((1u << MAX_CLASSES) - 1) || !!(itt.AllowableClass & (1 << (c - 1))))
                 _botsWanderCreaturesSortedGear[c][slot][lstep].push_back(itt.ItemId);
         }
     };
@@ -1649,8 +1659,10 @@ void BotDataMgr::CreateWanderingBotsSortedGear()
                     case INVTYPE_SHIELD:
                         if (proto.Armor == 0)
                             break;
+                        if (!is_caster_item)
+                            push_gear_to_classes(proto, BOT_SLOT_OFFHAND, reqLstep, { BOT_CLASS_WARRIOR });
                         if (is_caster_item || proto.RequiredLevel < 60 || (proto.RequiredLevel < 69 && (proto.RandomProperty || proto.RandomSuffix)))
-                            push_gear_to_classes(proto, BOT_SLOT_OFFHAND, reqLstep, { BOT_CLASS_SHAMAN, BOT_CLASS_SPELLBREAKER });
+                            push_gear_to_classes(proto, BOT_SLOT_OFFHAND, reqLstep, { BOT_CLASS_WARRIOR, BOT_CLASS_PALADIN, BOT_CLASS_SHAMAN, BOT_CLASS_SPELLBREAKER });
                         break;
                     case INVTYPE_HEAD:
                     case INVTYPE_SHOULDERS:
@@ -1711,6 +1723,8 @@ void BotDataMgr::CreateWanderingBotsSortedGear()
                 break;
             case ITEM_CLASS_WEAPON:
                 if (proto.Damage[0].DamageMin < 1.0f || proto.Damage[0].DamageMax < 2.0f || proto.Delay < 1000)
+                    break;
+                if (proto.RequiredLevel > 75 && proto.Quality < ITEM_QUALITY_EPIC)
                     break;
                 switch (proto.SubClass)
                 {
@@ -1788,11 +1802,10 @@ void BotDataMgr::CreateWanderingBotsSortedGear()
                         {
                             if (!is_caster_item)
                             {
-                                if (proto.RequiredLevel < 60 - ITEM_SORTING_LEVEL_STEP)
-                                    push_gear_to_classes(proto, BOT_SLOT_MAINHAND, reqLstep, { BOT_CLASS_WARRIOR });
+                                push_gear_to_classes(proto, BOT_SLOT_MAINHAND, reqLstep, { BOT_CLASS_WARRIOR });
                                 push_gear_to_classes(proto, BOT_SLOT_MAINHAND, reqLstep, { BOT_CLASS_ROGUE, BOT_CLASS_SPELLBREAKER });
                             }
-                            push_gear_to_classes(proto, BOT_SLOT_MAINHAND, reqLstep, { BOT_CLASS_SHAMAN });
+                            push_gear_to_classes(proto, BOT_SLOT_MAINHAND, reqLstep, { BOT_CLASS_PALADIN, BOT_CLASS_SHAMAN });
                         }
                         if (proto.InventoryType == INVTYPE_WEAPON || proto.InventoryType == INVTYPE_WEAPONOFFHAND)
                         {
@@ -1810,11 +1823,10 @@ void BotDataMgr::CreateWanderingBotsSortedGear()
                         {
                             if (!is_caster_item)
                             {
-                                if (proto.RequiredLevel < 60 - ITEM_SORTING_LEVEL_STEP)
-                                    push_gear_to_classes(proto, BOT_SLOT_MAINHAND, reqLstep, { BOT_CLASS_WARRIOR });
+                                push_gear_to_classes(proto, BOT_SLOT_MAINHAND, reqLstep, { BOT_CLASS_WARRIOR });
                                 push_gear_to_classes(proto, BOT_SLOT_MAINHAND, reqLstep, { BOT_CLASS_ROGUE, BOT_CLASS_SPELLBREAKER });
                             }
-                            push_gear_to_classes(proto, BOT_SLOT_MAINHAND, reqLstep, { BOT_CLASS_SHAMAN });
+                            push_gear_to_classes(proto, BOT_SLOT_MAINHAND, reqLstep, { BOT_CLASS_PALADIN, BOT_CLASS_SHAMAN });
                             if (is_caster_item || proto.RequiredLevel < 55 || (proto.RequiredLevel < 78 && (proto.RandomProperty || proto.RandomSuffix)))
                                 push_gear_to_classes(proto, BOT_SLOT_MAINHAND, reqLstep, { BOT_CLASS_DRUID, BOT_CLASS_PRIEST });
                         }
@@ -1834,10 +1846,10 @@ void BotDataMgr::CreateWanderingBotsSortedGear()
                         {
                             if (!is_caster_item)
                             {
-                                if (proto.RequiredLevel < 60 - ITEM_SORTING_LEVEL_STEP)
-                                    push_gear_to_classes(proto, BOT_SLOT_MAINHAND, reqLstep, { BOT_CLASS_WARRIOR });
+                                push_gear_to_classes(proto, BOT_SLOT_MAINHAND, reqLstep, { BOT_CLASS_WARRIOR });
                                 push_gear_to_classes(proto, BOT_SLOT_MAINHAND, reqLstep, { BOT_CLASS_ROGUE, BOT_CLASS_SPELLBREAKER, BOT_CLASS_DARK_RANGER });
                             }
+                            push_gear_to_classes(proto, BOT_SLOT_MAINHAND, reqLstep, { BOT_CLASS_PALADIN });
                             if (is_caster_item || proto.RequiredLevel < 55 || (proto.RequiredLevel < 78 && (proto.RandomProperty || proto.RandomSuffix)))
                                 push_gear_to_classes(proto, BOT_SLOT_MAINHAND, reqLstep, { BOT_CLASS_MAGE, BOT_CLASS_WARLOCK });
                         }
@@ -1856,8 +1868,7 @@ void BotDataMgr::CreateWanderingBotsSortedGear()
                         {
                             if (!is_caster_item)
                             {
-                                if (proto.RequiredLevel < 60 - ITEM_SORTING_LEVEL_STEP)
-                                    push_gear_to_classes(proto, BOT_SLOT_MAINHAND, reqLstep, { BOT_CLASS_WARRIOR });
+                                push_gear_to_classes(proto, BOT_SLOT_MAINHAND, reqLstep, { BOT_CLASS_WARRIOR });
                                 push_gear_to_classes(proto, BOT_SLOT_MAINHAND, reqLstep, { BOT_CLASS_SHAMAN, BOT_CLASS_ROGUE, BOT_CLASS_SPELLBREAKER });
                             }
                         }
@@ -1965,13 +1976,14 @@ Item* BotDataMgr::GenerateWanderingBotItem(uint8 slot, uint8 botclass, uint8 lev
         validVec.reserve(itemIdVec->size() / 4);
         for (uint32 iid : *itemIdVec)
         {
-            if (check(sObjectMgr->GetItemTemplate(iid)))
+            ItemTemplate const* proto = sObjectMgr->GetItemTemplate(iid);
+            if (check(proto))
                 validVec.push_back(iid);
         }
 
         if (!validVec.empty())
         {
-            uint32 itemId = Trinity::Containers::SelectRandomContainerElement(*itemIdVec);
+            uint32 itemId = Trinity::Containers::SelectRandomContainerElement(validVec);
             if (Item* newItem = Item::CreateItem(itemId, 1, nullptr))
             {
                 if (uint32 randomPropertyId = GenerateItemRandomPropertyId(itemId))
@@ -1983,6 +1995,216 @@ Item* BotDataMgr::GenerateWanderingBotItem(uint8 slot, uint8 botclass, uint8 lev
     }
 
     return nullptr;
+}
+
+bool BotDataMgr::GenerateWanderingBotItemEnchants(Item* item, uint8 slot, uint8 spec)
+{
+    bool result = false;
+
+    switch (slot)
+    {
+        case BOT_SLOT_BODY:
+        case BOT_SLOT_TRINKET1:
+        case BOT_SLOT_TRINKET2:
+            return result;
+        default:
+            break;
+    }
+
+    ItemTemplate const* proto = item->GetTemplate();
+
+    if (proto->RequiredLevel < 60)
+        return result;
+
+    static const auto is_enchantable = [](ItemTemplate const* p, SpellInfo const* s) {
+        SpellEffectInfo const& e = s->GetEffect(EFFECT_0);
+        return e.Effect == SPELL_EFFECT_ENCHANT_ITEM && s->EquippedItemClass == int32(p->Class) && s->BaseLevel <= p->RequiredLevel && e.MiscValue > 0 &&
+            (s->EquippedItemClass == ITEM_CLASS_WEAPON ? !!(s->EquippedItemSubClassMask & (1 << p->SubClass)) : !!(s->EquippedItemInventoryTypeMask & (1 << p->InventoryType))) &&
+            sSpellItemEnchantmentStore.LookupEntry(uint32(e.MiscValue));
+    };
+
+    constexpr std::array<uint32, 10> weapon_enchants_dk{ 53323, 53331, 53341, 53342, 53343, 53344, 53346, 53347, 62158, 70164 }; //2h only
+    constexpr std::array<uint32, 11> weapon_enchants_caster{ 27968, 27975, 28003, 34010, 44510, 44629, 59619, 59625, 60714, 62948, 62959 };
+    constexpr std::array<uint32, 18> weapon_enchants_melee{ 27971, 27977, 27984, 28004, 42620, 42974, 44524, 44576, 44630, 44633, 46578, 55836, 59619, 59621, 60621, 60691, 60707, 62257 };
+    constexpr std::array<uint32, 34> armor_enchants_caster{ 34003, 34008, 44383, 44488, 44492, 44528, 44555, 44582, 44592, 44612, 44616, 44623, 44635, 47898, 47900, 47901, 57690, 57691, 59636, 59784, 59970, 60609, 60653, 60692, 60767, 61120, 61271, 62256, 60583, 50911, 55016, 55634, 55642, 56034 };
+    constexpr std::array<uint32, 40> armor_enchants_melee{ 34007, 34008, 34009, 44383, 44484, 44488, 44492, 44500, 44513, 44528, 44529, 44575, 44589, 44598, 44612, 44616, 44623, 47898, 47900, 47901, 59777, 59954, 60606, 60609, 60616, 60623, 60663, 60668, 60692, 60763, 61271, 62256, 50903, 50911, 55016, 55777, 57690, 61117, 62201, 59636 };
+
+    //enchants
+    SpellInfo const* sInfo;
+    std::vector<uint32> valid_enchant_ids;
+    valid_enchant_ids.reserve(1u << 6);
+    switch (spec)
+    {
+        case BOT_SPEC_PALADIN_HOLY:
+        case BOT_SPEC_PRIEST_DISCIPLINE:
+        case BOT_SPEC_PRIEST_HOLY:
+        case BOT_SPEC_PRIEST_SHADOW:
+        case BOT_SPEC_SHAMAN_ELEMENTAL:
+        case BOT_SPEC_SHAMAN_RESTORATION:
+        case BOT_SPEC_MAGE_ARCANE:
+        case BOT_SPEC_MAGE_FIRE:
+        case BOT_SPEC_MAGE_FROST:
+        case BOT_SPEC_WARLOCK_AFFLICTION:
+        case BOT_SPEC_WARLOCK_DEMONOLOGY:
+        case BOT_SPEC_WARLOCK_DESTRUCTION:
+        case BOT_SPEC_DRUID_BALANCE:
+        case BOT_SPEC_DRUID_RESTORATION:
+            switch (proto->Class)
+            {
+                case ITEM_CLASS_WEAPON:
+                    for (uint32 spellId : weapon_enchants_caster)
+                    {
+                        sInfo = sSpellMgr->AssertSpellInfo(spellId);
+                        if (is_enchantable(proto, sInfo))
+                            valid_enchant_ids.push_back(uint32(sInfo->GetEffect(EFFECT_0).MiscValue));
+                    }
+                    break;
+                case ITEM_CLASS_ARMOR:
+                    for (uint32 spellId : armor_enchants_caster)
+                    {
+                        sInfo = sSpellMgr->AssertSpellInfo(spellId);
+                        if (is_enchantable(proto, sInfo))
+                            valid_enchant_ids.push_back(uint32(sInfo->GetEffect(EFFECT_0).MiscValue));
+                    }
+                    break;
+                default:
+                    break;
+            }
+            break;
+        case BOT_SPEC_DK_BLOOD:
+        case BOT_SPEC_DK_FROST:
+        case BOT_SPEC_DK_UNHOLY:
+            switch (proto->Class)
+            {
+                case ITEM_CLASS_WEAPON:
+                    for (uint32 spellId : weapon_enchants_dk)
+                    {
+                        sInfo = sSpellMgr->AssertSpellInfo(spellId);
+                        if (is_enchantable(proto, sInfo))
+                            valid_enchant_ids.push_back(uint32(sInfo->GetEffect(EFFECT_0).MiscValue));
+                    }
+                    break;
+                default:
+                    break;
+            }
+        [[fallthrough]];
+        case BOT_SPEC_WARRIOR_ARMS:
+        case BOT_SPEC_WARRIOR_FURY:
+        case BOT_SPEC_WARRIOR_PROTECTION:
+        case BOT_SPEC_PALADIN_PROTECTION:
+        case BOT_SPEC_PALADIN_RETRIBUTION:
+        case BOT_SPEC_HUNTER_BEASTMASTERY:
+        case BOT_SPEC_HUNTER_MARKSMANSHIP:
+        case BOT_SPEC_HUNTER_SURVIVAL:
+        case BOT_SPEC_ROGUE_ASSASINATION:
+        case BOT_SPEC_ROGUE_COMBAT:
+        case BOT_SPEC_ROGUE_SUBTLETY:
+        case BOT_SPEC_SHAMAN_ENHANCEMENT:
+        case BOT_SPEC_DRUID_FERAL:
+            switch (proto->Class)
+            {
+                case ITEM_CLASS_WEAPON:
+                    for (uint32 spellId : weapon_enchants_melee)
+                    {
+                        sInfo = sSpellMgr->AssertSpellInfo(spellId);
+                        if (is_enchantable(proto, sInfo))
+                            valid_enchant_ids.push_back(uint32(sInfo->GetEffect(EFFECT_0).MiscValue));
+                    }
+                    break;
+                case ITEM_CLASS_ARMOR:
+                    for (uint32 spellId : armor_enchants_melee)
+                    {
+                        sInfo = sSpellMgr->AssertSpellInfo(spellId);
+                        if (is_enchantable(proto, sInfo))
+                            valid_enchant_ids.push_back(uint32(sInfo->GetEffect(EFFECT_0).MiscValue));
+                    }
+                    break;
+                default:
+                    break;
+            }
+            break;
+        default:
+            break;
+    }
+
+    uint32 enchant_id;
+    enchant_id = valid_enchant_ids.empty() ? 0 : valid_enchant_ids.size() == 1u ? valid_enchant_ids.front() : Trinity::Containers::SelectRandomContainerElement(valid_enchant_ids);
+    if (enchant_id)
+    {
+        item->SetUInt32Value(ITEM_FIELD_ENCHANTMENT_1_1 + PERM_ENCHANTMENT_SLOT*MAX_ENCHANTMENT_OFFSET + ENCHANTMENT_ID_OFFSET, enchant_id);
+        item->SetUInt32Value(ITEM_FIELD_ENCHANTMENT_1_1 + PERM_ENCHANTMENT_SLOT*MAX_ENCHANTMENT_OFFSET + ENCHANTMENT_DURATION_OFFSET, 0);
+        item->SetUInt32Value(ITEM_FIELD_ENCHANTMENT_1_1 + PERM_ENCHANTMENT_SLOT*MAX_ENCHANTMENT_OFFSET + ENCHANTMENT_CHARGES_OFFSET, 0);
+        result = true;
+    }
+
+    //gems
+    constexpr std::array<uint32, 5> gems_caster{ 40132, 40135, 40123, 40127, 40128 };
+    constexpr std::array<uint32, 6> gems_melee{ 40136, 40140, 40124, 40125, 40127, 40128 };
+
+    for (uint8 i = 0; i < MAX_ITEM_PROTO_SOCKETS; ++i)
+    {
+        valid_enchant_ids.clear();
+        switch (spec)
+        {
+            case BOT_SPEC_PALADIN_HOLY:
+            case BOT_SPEC_PRIEST_DISCIPLINE:
+            case BOT_SPEC_PRIEST_HOLY:
+            case BOT_SPEC_PRIEST_SHADOW:
+            case BOT_SPEC_SHAMAN_ELEMENTAL:
+            case BOT_SPEC_SHAMAN_RESTORATION:
+            case BOT_SPEC_MAGE_ARCANE:
+            case BOT_SPEC_MAGE_FIRE:
+            case BOT_SPEC_MAGE_FROST:
+            case BOT_SPEC_WARLOCK_AFFLICTION:
+            case BOT_SPEC_WARLOCK_DEMONOLOGY:
+            case BOT_SPEC_WARLOCK_DESTRUCTION:
+            case BOT_SPEC_DRUID_BALANCE:
+            case BOT_SPEC_DRUID_RESTORATION:
+                for (uint32 gId : gems_caster)
+                {
+                    GemPropertiesEntry const* gprops = sGemPropertiesStore.LookupEntry(sObjectMgr->GetItemTemplate(gId)->GemProperties);
+                    if (gprops->Type & proto->Socket[i].Color)
+                        valid_enchant_ids.push_back(gprops->EnchantID);
+                }
+                break;
+            case BOT_SPEC_DK_BLOOD:
+            case BOT_SPEC_DK_FROST:
+            case BOT_SPEC_DK_UNHOLY:
+            case BOT_SPEC_WARRIOR_ARMS:
+            case BOT_SPEC_WARRIOR_FURY:
+            case BOT_SPEC_WARRIOR_PROTECTION:
+            case BOT_SPEC_PALADIN_PROTECTION:
+            case BOT_SPEC_PALADIN_RETRIBUTION:
+            case BOT_SPEC_HUNTER_BEASTMASTERY:
+            case BOT_SPEC_HUNTER_MARKSMANSHIP:
+            case BOT_SPEC_HUNTER_SURVIVAL:
+            case BOT_SPEC_ROGUE_ASSASINATION:
+            case BOT_SPEC_ROGUE_COMBAT:
+            case BOT_SPEC_ROGUE_SUBTLETY:
+            case BOT_SPEC_SHAMAN_ENHANCEMENT:
+            case BOT_SPEC_DRUID_FERAL:
+                for (uint32 gId : gems_melee)
+                {
+                    GemPropertiesEntry const* gprops = sGemPropertiesStore.LookupEntry(sObjectMgr->GetItemTemplate(gId)->GemProperties);
+                    if (gprops->Type & proto->Socket[i].Color)
+                        valid_enchant_ids.push_back(gprops->EnchantID);
+                }
+                break;
+            default:
+                break;
+        }
+
+        enchant_id = valid_enchant_ids.empty() ? 0 : valid_enchant_ids.size() == 1u ? valid_enchant_ids.front() : Trinity::Containers::SelectRandomContainerElement(valid_enchant_ids);
+        if (enchant_id)
+        {
+            item->SetUInt32Value(ITEM_FIELD_ENCHANTMENT_1_1 + (uint8(SOCK_ENCHANTMENT_SLOT) + i)*MAX_ENCHANTMENT_OFFSET + ENCHANTMENT_ID_OFFSET, enchant_id);
+            item->SetUInt32Value(ITEM_FIELD_ENCHANTMENT_1_1 + (uint8(SOCK_ENCHANTMENT_SLOT) + i)*MAX_ENCHANTMENT_OFFSET + ENCHANTMENT_DURATION_OFFSET, 0);
+            item->SetUInt32Value(ITEM_FIELD_ENCHANTMENT_1_1 + (uint8(SOCK_ENCHANTMENT_SLOT) + i)*MAX_ENCHANTMENT_OFFSET + ENCHANTMENT_CHARGES_OFFSET, 0);
+            result = true;
+        }
+    }
+
+    return result;
 }
 
 CreatureTemplate const* BotDataMgr::GetBotExtraCreatureTemplate(uint32 entry)
@@ -2788,7 +3010,12 @@ class TC_GAME_API BotDataMgrShutdownScript : public WorldScript
 public:
     BotDataMgrShutdownScript() : WorldScript("BotDataMgrShutdownScript") {}
 
-    void OnShutdown() override { botDataEvents.KillAllEvents(true); }
+    void OnShutdown() override
+    {
+        botSpawnEvents.KillAllEvents(true);
+        for (auto& kv : botBGJoinEvents)
+            kv.second.KillAllEvents(true);
+    }
 };
 
 void AddSC_botdatamgr_scripts()
