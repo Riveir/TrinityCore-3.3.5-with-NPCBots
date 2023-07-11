@@ -2568,14 +2568,6 @@ void Player::RemoveFromGroup(Group* group, ObjectGuid guid, RemoveMethod method 
     {
         if (player->HaveBot())
         {
-            //uint8 players = 0;
-            //Group::MemberSlotList const& members = group->GetMemberSlots();
-            //for (Group::member_citerator itr = members.begin(); itr!= members.end(); ++itr)
-            //{
-            //    if (Player* pl = ObjectAccessor::FindPlayer(itr->guid))
-            //        ++players;
-            //}
-
             //remove npcbots and set up new group if needed
             player->GetBotMgr()->RemoveAllBotsFromGroup();
             group = player->GetGroup();
@@ -2599,7 +2591,6 @@ void Player::RemoveFromGroup(Group* group, ObjectGuid guid, RemoveMethod method 
         }
     }
     //npcbot - bot is being removed from group - find master and remove bot through botmap
-    //else if (Creature* bot = ObjectAccessor::GetObjectInOrOutOfWorld(guid, (Creature*)NULL))
     else if (guid.IsCreature())
     {
         for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
@@ -2616,9 +2607,6 @@ void Player::RemoveFromGroup(Group* group, ObjectGuid guid, RemoveMethod method 
                 }
             }
         }
-        //ASSERT(!bot->IsFreeBot());
-        //bot->GetBotOwner()->GetBotMgr()->RemoveBotFromGroup(bot, false);
-        //return;
     }
 
     group->RemoveMember(guid, method, kicker, reason);
@@ -24561,22 +24549,6 @@ bool Player::inRandomLfgDungeon() const
 
 void Player::SetBattlegroundOrBattlefieldRaid(Group* group, int8 subgroup)
 {
-    //npcbot: add bots to new group
-    if (HaveBot() && GetGroup())
-    {
-        BotMap const* map = GetBotMgr()->GetBotMap();
-        for (BotMap::const_iterator itr = map->begin(); itr != map->end(); ++itr)
-        {
-            Creature* bot = itr->second;
-            if (!bot || !GetGroup()->IsMember(bot->GetGUID()))
-                continue;
-
-            if (!group->IsMember(itr->first))
-                group->AddMember(bot);
-        }
-    }
-    //end npcbot
-
     //we must move references from m_group to m_originalGroup
     SetOriginalGroup(GetGroup(), GetSubGroup());
 
