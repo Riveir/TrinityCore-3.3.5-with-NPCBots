@@ -36,6 +36,7 @@
 
 //npcbot: try query bot name
 #include "CreatureData.h"
+#include "botdatamgr.h"
 #include "botmgr.h"
 //end npcbot
 
@@ -629,6 +630,14 @@ void WorldSession::HandleGroupChangeSubGroupOpcode(WorldPacket& recvData)
         guid = movedPlayer->GetGUID();
     else
         guid = sCharacterCache->GetCharacterGuidByName(name);
+
+    //npcbot
+    if (guid.IsEmpty())
+    {
+        if (Creature const* bot = BotDataMgr::FindBot(name, GetSessionDbcLocale()))
+            guid = bot->GetGUID();
+    }
+    //end npcbot
 
     if (guid.IsEmpty())
         return;
