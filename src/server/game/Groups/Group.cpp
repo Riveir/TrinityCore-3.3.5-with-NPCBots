@@ -500,7 +500,15 @@ bool Group::AddMember(Creature* creature)
 
     SubGroupCounterIncrease(subGroup);
 
-    BotMgr::SetBotGroup(creature, this);
+    if (creature->GetBotGroup())
+    {
+        if (isBGGroup() || isBFGroup()) // if player is in group and he is being added to BG raid group, then call SetBattlegroundRaid()
+            creature->SetBattlegroundOrBattlefieldRaid(this, subGroup);
+        else //if player is in bg raid and we are adding him to normal group, then call SetOriginalGroup()
+            creature->SetOriginalGroup(this, subGroup);
+    }
+    else //if player is not in group, then call set group
+        creature->SetBotGroup(this, subGroup);
 
     if (!isRaidGroup())
     {
@@ -697,7 +705,19 @@ bool Group::RemoveMember(ObjectGuid guid, RemoveMethod const& method /*= GROUP_R
 
         if (GetMembersCount() > ((isBGGroup() || isLFGGroup() || isBFGroup()) ? 1u : 2u))
         {
-            BotMgr::SetBotGroup(guid, nullptr);
+            if (Creature const* cbot = BotDataMgr::FindBot(guid.GetEntry()))
+            {
+                Creature* bot = const_cast<Creature*>(cbot);
+                if (isBGGroup() || isBFGroup())
+                    bot->RemoveFromBattlegroundOrBattlefieldRaid();
+                else
+                {
+                    if (bot->GetOriginalGroup() == this)
+                        bot->SetOriginalGroup(nullptr);
+                    else
+                        bot->SetBotGroup(nullptr);
+                }
+            }
 
             // Remove bot from group in DB
             if (!isBGGroup() && !isBFGroup())
@@ -706,6 +726,7 @@ bool Group::RemoveMember(ObjectGuid guid, RemoveMethod const& method /*= GROUP_R
                 CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_NPCBOT_GROUP_MEMBER);
                 stmt->setUInt32(0, guid.GetEntry());
                 CharacterDatabase.Execute(stmt);
+                DelinkBotMember(guid);
             }
 
             // Update subgroup
@@ -1001,7 +1022,19 @@ void Group::Disband(bool hideDestroy /* = false */)
         //npcbot: set bot's group
         if (citr->guid.IsCreature())
         {
-            BotMgr::SetBotGroup(citr->guid, nullptr);
+            if (Creature const* cbot = BotDataMgr::FindBot(citr->guid.GetEntry()))
+            {
+                Creature* bot = const_cast<Creature*>(cbot);
+                if (isBGGroup() || isBFGroup())
+                    bot->RemoveFromBattlegroundOrBattlefieldRaid();
+                else
+                {
+                    if (bot->GetOriginalGroup() == this)
+                        bot->SetOriginalGroup(nullptr);
+                    else
+                        bot->SetBotGroup(nullptr);
+                }
+            }
             continue;
         }
         //end npcbot
@@ -2140,6 +2173,24 @@ void Group::ChangeMembersGroup(ObjectGuid guid, uint8 group)
         CharacterDatabase.Execute(stmt);
     }
 
+    //npcbot
+    if (guid.IsCreature())
+    {
+        Creature const* cbot = BotDataMgr::FindBot(guid.GetEntry());
+        if (Creature* bot = cbot ? const_cast<Creature*>(cbot) : nullptr)
+        {
+            if (bot->GetBotGroup() == this)
+                bot->SetOriginalSubGroup(group);
+            else
+            {
+                // If player is in BG raid, it is possible that he is also in normal raid - and that normal raid is stored in m_originalGroup reference
+                prevSubGroup = bot->GetOriginalSubGroup();
+                bot->SetOriginalSubGroup(group);
+            }
+        }
+    }
+    else
+    //end npcbot
     // In case the moved player is online, update the player object with the new sub group references
     if (Player* player = ObjectAccessor::FindConnectedPlayer(guid))
     {
@@ -2896,6 +2947,28 @@ void Group::DelinkMember(ObjectGuid guid)
         ref = nextRef;
     }
 }
+
+//npcbot
+void Group::LinkBotMember(GroupBotReference* bRef)
+{
+    m_botMemberMgr.insertFirst(bRef);
+}
+
+void Group::DelinkBotMember(ObjectGuid guid)
+{
+    GroupBotReference* ref = m_botMemberMgr.getFirst();
+    while (ref)
+    {
+        GroupBotReference* nextRef = ref->next();
+        if (ref->GetSource()->GetGUID() == guid)
+        {
+            ref->unlink();
+            break;
+        }
+        ref = nextRef;
+    }
+}
+//end npcbot
 
 Group::BoundInstancesMap& Group::GetBoundInstances(Difficulty difficulty)
 {
