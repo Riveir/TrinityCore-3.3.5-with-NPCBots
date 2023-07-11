@@ -1328,7 +1328,7 @@ void Battleground::AddOrSetPlayerToCorrectBgGroup(Player* player, uint32 team)
 //npcbot
 void Battleground::AddOrSetBotToCorrectBgGroup(Creature* bot, uint32 team)
 {
-    ObjectGuid playerGuid = bot->GetGUID();
+    ObjectGuid botGuid = bot->GetGUID();
     Group* group = GetBgRaid(team);
     if (!group)                                      // first player joined
     {
@@ -1338,7 +1338,12 @@ void Battleground::AddOrSetBotToCorrectBgGroup(Creature* bot, uint32 team)
     }
     else                                            // raid already exist
     {
-        if (!group->IsMember(playerGuid))
+        if (group->IsMember(botGuid))
+        {
+            uint8 subgroup = group->GetMemberGroup(botGuid);
+            bot->SetBattlegroundOrBattlefieldRaid(group, subgroup);
+        }
+        else
             group->AddMember(bot);
     }
 }
