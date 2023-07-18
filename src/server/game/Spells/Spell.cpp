@@ -515,6 +515,7 @@ m_caster((info->HasAttribute(SPELL_ATTR6_CAST_BY_CHARMER) && caster->GetCharmerO
 , m_spellValue(new SpellValue(m_spellInfo)), _spellEvent(nullptr)
 {
     m_customError = SPELL_CUSTOM_ERROR_NONE;
+    m_fromClient = false;
     m_selfContainer = nullptr;
     m_referencedFromCurrentSpell = false;
     m_executedCurrently = false;
@@ -4301,7 +4302,7 @@ void Spell::SendSpellStart()
     if (schoolImmunityMask || mechanicImmunityMask)
         castFlags |= CAST_FLAG_IMMUNITY;
 
-    if (((IsTriggered() && !m_spellInfo->IsAutoRepeatRangedSpell()) || m_triggeredByAuraSpell) && !m_cast_count)
+    if (((IsTriggered() && !m_spellInfo->IsAutoRepeatRangedSpell()) || m_triggeredByAuraSpell) && !m_fromClient)
         castFlags |= CAST_FLAG_PENDING;
 
     if (m_spellInfo->HasAttribute(SPELL_ATTR0_REQ_AMMO) || m_spellInfo->HasAttribute(SPELL_ATTR0_CU_NEEDS_AMMO_DATA))
@@ -4358,7 +4359,7 @@ void Spell::SendSpellGo()
     uint32 castFlags = CAST_FLAG_UNKNOWN_9;
 
     // triggered spells with spell visual != 0
-    if (((IsTriggered() && !m_spellInfo->IsAutoRepeatRangedSpell()) || m_triggeredByAuraSpell) && !m_cast_count)
+    if (((IsTriggered() && !m_spellInfo->IsAutoRepeatRangedSpell()) || m_triggeredByAuraSpell) && !m_fromClient)
         castFlags |= CAST_FLAG_PENDING;
 
     if (m_spellInfo->HasAttribute(SPELL_ATTR0_REQ_AMMO) || m_spellInfo->HasAttribute(SPELL_ATTR0_CU_NEEDS_AMMO_DATA))
@@ -4449,10 +4450,9 @@ void Spell::SendSpellGo()
     }
 
     // should be sent to self only
-    if (castFlags & CAST_FLAG_POWER_LEFT_SELF)
+    if (castFlags & CAST_FLAG_POWER_LEFT_SELF && m_caster->IsPlayer())
     {
-        if (Player* player = m_caster->GetAffectingPlayer())
-            player->SendDirectMessage(packet.Write());
+        m_caster->ToPlayer()->SendDirectMessage(packet.Write());
 
         packet.Clear();
 
@@ -5395,6 +5395,9 @@ SpellCastResult Spell::CheckCast(bool strict, uint32* param1 /*= nullptr*/, uint
                 return SPELL_FAILED_MOVING;
         }
 
+        if (unitCaster->IsCharmed() && m_spellInfo->HasAttribute(SPELL_ATTR5_NOT_USABLE_WHILE_CHARMED))
+            return SPELL_FAILED_CHARMED;
+
         // Check vehicle flags
         if (!(_triggeredCastFlags & TRIGGERED_IGNORE_CASTER_MOUNTED_OR_ON_VEHICLE))
         {
@@ -6124,7 +6127,7 @@ SpellCastResult Spell::CheckCast(bool strict, uint32* param1 /*= nullptr*/, uint
                     return SPELL_FAILED_NO_PET;
 
                 if (pet->GetCharmerGUID())
-                    return SPELL_FAILED_CHARMED;
+                    return SPELL_FAILED_ALREADY_HAVE_CHARM;
                 break;
             }
             case SPELL_AURA_MOD_POSSESS:
@@ -6157,7 +6160,7 @@ SpellCastResult Spell::CheckCast(bool strict, uint32* param1 /*= nullptr*/, uint
                         return SPELL_FAILED_CANT_BE_CHARMED;
 
                     if (target->GetCharmerGUID())
-                        return SPELL_FAILED_CHARMED;
+                        return SPELL_FAILED_CANT_BE_CHARMED;
  
                     //npcbot: do not allow to charm owned npcbots
                     if (target->GetCreator() && target->GetCreator()->IsPlayer())
@@ -6378,16 +6381,8 @@ SpellCastResult Spell::CheckCasterAuras(uint32* param1) const
     // Get unit state
     uint32 const unitflag = unitCaster->GetUnitFlags();
 
-    // this check should only be done when player does cast directly
-    // (ie not when it's called from a script) Breaks for example PlayerAI when charmed
-    /*
-    if (unitCaster->GetCharmerGUID())
-    {
-        if (Unit* charmer = unitCaster->GetCharmer())
-            if (charmer->GetCharmed() != unitCaster && !CheckSpellCancelsCharm(param1))
-                result = SPELL_FAILED_CHARMED;
-    }
-    */
+    if (m_fromClient && unitCaster->IsCharmed() && unitCaster->IsPlayer() && !CheckSpellCancelsCharm(param1))
+        result = SPELL_FAILED_CHARMED;
 
     // spell has attribute usable while having a cc state, check if caster has allowed mechanic auras, another mechanic types must prevent cast spell
     auto mechanicCheck = [&](AuraType type) -> SpellCastResult
