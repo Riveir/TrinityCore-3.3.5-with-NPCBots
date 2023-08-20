@@ -2847,6 +2847,11 @@ public:
         const_cast<Creature*>(bot)->CombatStop();
         bot->GetBotAI()->Reset();
         bot->GetBotAI()->canUpdate = false;
+
+        CreatureData const* data = ASSERT_NOTNULL(sObjectMgr->GetCreatureData(bot->GetSpawnId()));
+        if (bot->IsInWorld() && data->mapId != bot->GetMap()->GetId())
+            bot->GetMap()->AddObjectToRemoveList(const_cast<Creature*>(bot));
+
         Creature::DeleteFromDB(bot->GetSpawnId());
 
         BotDataMgr::UpdateNpcBotData(bot->GetEntry(), NPCBOT_UPDATE_ERASE);
