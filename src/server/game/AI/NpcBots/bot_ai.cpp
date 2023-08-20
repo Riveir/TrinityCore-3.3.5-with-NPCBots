@@ -215,6 +215,7 @@ bot_ai::bot_ai(Creature* creature) : CreatureAI(creature)
     regenTimer = 0;
     m_botSpellInfo = nullptr;
     waitTimer = 0;
+    _moveBehindTimer = 0;
     itemsAutouseTimer = 0;
     _usableItemSlotsMask = 0;
     evadeDelayTimer = 0;
@@ -1126,7 +1127,7 @@ void bot_ai::BotMovement(BotMovementType type, Position const* pos, Unit* target
     {
         case BOT_MOVE_CHASE:
             ASSERT(target);
-            mover->GetMotionMaster()->MoveChase(target, {}, ChaseAngle(target->GetRelativeAngle(me), float(M_PI / 8.0)));
+            mover->GetMotionMaster()->MoveChase(target, {}, ChaseAngle(target->GetRelativeAngle(me), float(target->IsPlayer() ? M_PI * 2.0 : M_PI / 8.0)));
             break;
         case BOT_MOVE_POINT:
             mover->GetMotionMaster()->Add(new PointMovementGenerator<Creature>(1, pos->m_positionX, pos->m_positionY, pos->m_positionZ, generatePath, speed));
@@ -2218,14 +2219,9 @@ void bot_ai::_listAuras(Player const* player, Unit const* unit) const
 
         //debug
         botstring << "\n_lastWMOAreaId: " << uint32(_lastWMOAreaId);
-
-        //debug
         botstring << "\nGCD: " << uint32(GC_Timer);
-
-        //debug
+        //botstring << "\nPotion CD: " << uint32(_potionTimer);
         //botstring << "\ncurrent Engage timer: " << GetEngageTimer();
-
-        //debug
         //for (uint32 i = 0; i != 148; ++i)
         //{
         //    float val = me->GetFloatValue(i);
@@ -3659,6 +3655,10 @@ bool bot_ai::CanBotAttack(Unit const* target, int8 byspell, bool secondary) cons
             case 32541: case 32542: case 32543: case 32545: case 32546: case 32547: case 32666: case 32667: // training dummy
             case 7668: case 7669: case 7670: case 7671: // Blasted Lands servants
                 return false;
+            case 21416: case 21709: case 21710: case 21711: // Shadowmoon Valley Broken element corruptors
+                if (target->HasAuraTypeWithMiscvalue(SPELL_AURA_SCHOOL_IMMUNITY, 127))
+                    return false;
+                break;
             default:
                 break;
         }
@@ -5415,15 +5415,15 @@ void bot_ai::CheckAttackState()
 //Move behind current target if needed (avoid cleaves and dodges/parries, also rogues/ferals)
 void bot_ai::MoveBehind(Unit const* target) const
 {
-    if (HasBotCommandState(BOT_COMMAND_MASK_UNMOVING) || HasRole(BOT_ROLE_RANGED) || JumpingOrFalling() ||
+    if (_moveBehindTimer > lastdiff || HasBotCommandState(BOT_COMMAND_MASK_UNMOVING) || HasRole(BOT_ROLE_RANGED) || JumpingOrFalling() ||
         /*(me->isMoving() && target->GetTypeId() != TYPEID_PLAYER) ||*/
         me->GetVehicle() || (IsTank() && target->GetVictim() == me) || CCed(me, true) ||
         !target->IsWithinCombatRange(me, ATTACK_DISTANCE) || !target->HasInArc(float(M_PI), me))
         return;
 
-    bool targetMe = target->GetVictim() == me;
-    bool cced = CCed(target);
-    bool isPlayer = target->GetTypeId() == TYPEID_PLAYER;
+    const bool targetMe = target->GetVictim() == me;
+    const bool cced = CCed(target);
+    const bool isPlayer = target->GetTypeId() == TYPEID_PLAYER;
 
     if ((_botclass == BOT_CLASS_ROGUE || GetBotStance() == DRUID_CAT_FORM) ? (!targetMe || cced || isPlayer) : (!targetMe && (!cced || isPlayer)))
     {
@@ -5436,8 +5436,7 @@ void bot_ai::MoveBehind(Unit const* target) const
             return;
 
         BotMovement(BOT_MOVE_POINT, &position);
-        //me->GetMotionMaster()->MovePoint(me->GetMapId(), x, y, z);
-        const_cast<bot_ai*>(this)->waitTimer = 500;
+        const_cast<bot_ai*>(this)->_moveBehindTimer = urand(1000, (_botclass == BOT_CLASS_ROGUE || GetBotStance() == DRUID_CAT_FORM) ? 2000 : 4000);
     }
 }
 //MOUNT SUPPORT
@@ -13861,6 +13860,8 @@ void bot_ai::DefaultInit()
     if (IsWanderer())
     {
         _travel_node_cur = ASSERT_NOTNULL(BotDataMgr::GetClosestWanderNode(me));
+        if (firstspawn && BotMgr::IsWanderingWorldBot(me))
+            StartPotionTimer();
     }
 
     SetStats(true); // Class passives included
@@ -17417,6 +17418,7 @@ void bot_ai::CommonTimers(uint32 diff)
     if (GC_Timer > diff)            GC_Timer -= diff;
     if (checkAurasTimer > diff)     checkAurasTimer -= diff;
     if (waitTimer > diff)           waitTimer -= diff;
+    if (_moveBehindTimer > diff)    _moveBehindTimer -= diff;
     if (itemsAutouseTimer > diff)   itemsAutouseTimer -= diff;
     if (evadeDelayTimer > diff)     evadeDelayTimer -= diff;
     if (roleTimer > diff)           roleTimer -= diff;
@@ -17476,27 +17478,9 @@ void bot_ai::UpdateReviveTimer(uint32 diff)
             if (IsWanderer())
             {
                 outdoorsTimer = 0;
-
-                Position safePos;
-                if (me->GetMap()->GetEntry()->IsContinent())
+                if (me->GetMap()->GetEntry()->IsContinent() || me->GetMap()->IsBattleground())
                 {
-                    TeamId my_team = BotDataMgr::GetTeamIdForFaction(me->GetFaction());
-                    WorldSafeLocsEntry const* gy = sObjectMgr->GetClosestGraveyard(me->GetPositionX(), me->GetPositionY(), me->GetPositionZ(), me->GetMapId(),
-                        my_team == TEAM_HORDE ? HORDE : ALLIANCE);
-                    if (gy)
-                    {
-                        safePos.Relocate(gy->Loc.X, gy->Loc.Y, gy->Loc.Z, me->GetOrientation());
-                        if (me->GetDistance(safePos) > 15.0f)
-                            BotMgr::TeleportBot(me, sMapMgr->CreateBaseMap(gy->Continent), &safePos);
-                    }
-                    else
-                        safePos.Relocate(me);
-                }
-                else
-                    safePos.Relocate(me);
-
-                if (safePos.GetExactDist2d(homepos) > MAX_WANDER_NODE_DISTANCE || me->GetMap()->IsBattleground())
-                {
+                    Position safePos(*me);
                     WanderNode const* nextNode = GetNextTravelNode(&safePos, true);
                     if (!nextNode)
                     {
@@ -17507,6 +17491,8 @@ void bot_ai::UpdateReviveTimer(uint32 diff)
                     }
 
                     homepos.Relocate(nextNode);
+                    if (me->GetMap()->GetEntry()->IsContinent())
+                        BotMgr::TeleportBot(me, sMapMgr->CreateBaseMap(nextNode->GetMapId()), nextNode, true);
 
                     TC_LOG_TRACE("npcbots", "Bot %s id %u class %u level %u died on the way from node %u to %u ('%s'), NEW %u ('%s'), %s, dist %.1f yd!",
                         me->GetName().c_str(), me->GetEntry(), uint32(_botclass), uint32(me->GetLevel()), _travel_node_last ? _travel_node_last->GetWPId() : 0, _travel_node_cur->GetWPId(),
@@ -19169,7 +19155,7 @@ bool bot_ai::IsShootingWand(Unit const* u) const
 
 void bot_ai::StartPotionTimer()
 {
-    _potionTimer = POTION_CD;
+    _potionTimer = POTION_CD * (BotMgr::IsWanderingWorldBot(me) ? std::max<uint32>(uint32(Rand()) >> 3, 1u) : 1u);
 }
 
 bool bot_ai::CanBlock() const
